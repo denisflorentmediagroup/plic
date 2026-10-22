@@ -75,6 +75,8 @@ struct MainView: View { // swiftlint:disable:this type_body_length
     /// Whether the call awaiting confirmation will publish video. Set by
     /// whichever of the two toolbar buttons was pressed.
     @State private var pendingCallIsVideo = true
+
+    private var hasOngoingCall: Bool { currentRoom?.hasRoomCall ?? false }
     @State private var showPermissionDeniedAlert = false
     @State private var messageSearchTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
@@ -229,6 +231,25 @@ struct MainView: View { // swiftlint:disable:this type_body_length
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Plic needs microphone and camera access to make calls. Grant access in System Settings \u{203A} Privacy & Security.")
+        }
+        // On the window content, not on the toolbar buttons that raise it: a
+        // confirmation attached to a toolbar item cannot be dismissed on
+        // macOS 27, and came back on every Cancel until the app was quit.
+        .confirmationDialog(
+            hasOngoingCall ? "Join Call" : "Start Call",
+            isPresented: $showCallConfirmation
+        ) {
+            Button(hasOngoingCall ? "Join" : "Call") {
+                if let roomId = selectedRoomId {
+                    startCall(roomId: roomId, video: pendingCallIsVideo)
+                }
+            }
+        } message: {
+            if let name = currentRoom?.name {
+                Text(hasOngoingCall ? "Join the call in \(name)?" : "Start a call in \(name)?")
+            } else {
+                Text(hasOngoingCall ? "Join the call in this room?" : "Start a call in this room?")
+            }
         }
     }
 
@@ -418,8 +439,6 @@ struct MainView: View { // swiftlint:disable:this type_body_length
     /// call, which is the common case on a laptop.
     private func startCallButton(roomId: String) -> some View {
         let hasOngoingCall = currentRoom?.hasRoomCall ?? false
-        let confirmTitle = hasOngoingCall ? "Join Call" : "Start Call"
-        let confirmAction = hasOngoingCall ? "Join" : "Call"
 
         return HStack(spacing: 2) {
             callButton(
@@ -434,20 +453,6 @@ struct MainView: View { // swiftlint:disable:this type_body_length
                 video: true,
                 highlighted: hasOngoingCall
             )
-        }
-        .confirmationDialog(
-            confirmTitle,
-            isPresented: $showCallConfirmation
-        ) {
-            Button(confirmAction) {
-                startCall(roomId: roomId, video: pendingCallIsVideo)
-            }
-        } message: {
-            if let name = currentRoom?.name {
-                Text(hasOngoingCall ? "Join the call in \(name)?" : "Start a call in \(name)?")
-            } else {
-                Text(hasOngoingCall ? "Join the call in this room?" : "Start a call in this room?")
-            }
         }
     }
 
