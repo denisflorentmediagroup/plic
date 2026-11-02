@@ -665,6 +665,20 @@ final class CallWidgetBridge: @unchecked Sendable {
             return
         }
         let content = (data["content"] as? [String: Any]) ?? [:]
+        // A key is for one call. Without this, a key sent for another room
+        // would be installed here, under whichever identity its sender named.
+        guard (content["room_id"] as? String) == roomId else {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.activityLog?.log(
+                    category: .call, severity: .warning, source: "CallWidgetBridge",
+                    summary: "Dropping encryption key sent for another room",
+                    detail: "Sender: \(sender).",
+                    roomId: self.roomId
+                )
+            }
+            return
+        }
         guard let keyProvider else {
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -734,14 +748,17 @@ final class CallWidgetBridge: @unchecked Sendable {
             }
         }
         if participantIdentities.isEmpty {
-            // Last-resort fallback — older peers that omit both device_id
-            // and member.id. Element Call's parser does the same.
-            participantIdentities.append(memberId.isEmpty ? sender : memberId)
+            // Last-resort fallback for older peers that omit both device_id
+            // and member.id: the sender, never `member.id`, which is any
+            // string the sender chose and could name another participant.
+            participantIdentities.append(sender)
         }
 
         for entry in keyEntries {
+            // The index is a small ring position: anything else is a crafted
+            // message, and converting it to Int32 would trap.
             guard let base64Key = entry["key"] as? String,
-                  let index = entry["index"] as? Int,
+                  let index = entry["index"] as? Int, (0...255).contains(index),
                   let keyData = Data(base64Encoded: base64Key) else {
                 continue
             }
