@@ -104,12 +104,42 @@ struct LiveKitCredentialService {
         // Bootstrap path — we're the first to join. Prefer MSC4143
         // transports endpoint, fall back to `.well-known`.
         if let url = try? await fetchRTCTransportsURL() {
+            guard Self.isAcceptableServiceURL(url) else { throw LiveKitCredentialError.insecureURL }
             return url
         }
         if let url = try? await fetchWellKnownSFUURL() {
+            guard Self.isAcceptableServiceURL(url) else { throw LiveKitCredentialError.insecureURL }
             return url
         }
         throw LiveKitCredentialError.sfuURLNotFound
+    }
+
+    /// Whether a call server advertised by a room, a homeserver or a peer may
+    /// be contacted at all.
+    ///
+    /// The address decides where this Mac posts the user's OpenID token and
+    /// where the call's media goes, and any room member can advertise one.
+    /// Only `https` to a public host is accepted: plain `http` would carry
+    /// the token in the clear, and a local address would turn joining a call
+    /// into a request against the user's own network.
+    static func isAcceptableServiceURL(_ raw: String) -> Bool {
+        isAcceptable(raw, schemes: ["https"])
+    }
+
+    /// The same rule for the media server address a call server hands back,
+    /// which carries the LiveKit token: `wss` only, or `https` for servers
+    /// that spell it that way.
+    static func isAcceptableMediaURL(_ raw: String) -> Bool {
+        isAcceptable(raw, schemes: ["wss", "https"])
+    }
+
+    private static func isAcceptable(_ raw: String, schemes: Set<String>) -> Bool {
+        guard let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(), schemes.contains(scheme),
+              let host = url.host, !host.isEmpty,
+              url.user == nil, url.password == nil
+        else { return false }
+        return !LocalNetworkHost.contains(host)
     }
 
     private func fetchRTCTransportsURL() async throws -> String {
@@ -192,7 +222,7 @@ struct LiveKitCredentialService {
                   let fociPreferred = content["foci_preferred"] as? [[String: Any]],
                   let focus = fociPreferred.first(where: { ($0["type"] as? String) == "livekit" }),
                   let serviceURL = focus["livekit_service_url"] as? String,
-                  !serviceURL.isEmpty
+                  Self.isAcceptableServiceURL(serviceURL)
             else { continue }
 
             // Never converge on our OWN membership. We're about to publish a
@@ -209,11 +239,19 @@ struct LiveKitCredentialService {
             // (14400000ms). `created_ts` falls back to event-level
             // `origin_server_ts` so very old non-tombstoned events still
             // get pruned.
-            let createdTs = (content["created_ts"] as? NSNumber)?.int64Value
-                ?? (event["origin_server_ts"] as? NSNumber)?.int64Value
-                ?? 0
+            // Both timestamps come from the sender. A membership cannot
+            // predate the event that carries it, so `created_ts` is raised
+            // to the server's own timestamp when it claims otherwise — a
+            // backdated one would otherwise always be the "oldest" and pick
+            // the SFU for everyone. The sum is checked for overflow rather
+            // than trusted: a crafted value would trap here.
+            let originTs = (event["origin_server_ts"] as? NSNumber)?.int64Value ?? 0
+            let claimedTs = (content["created_ts"] as? NSNumber)?.int64Value ?? originTs
+            let createdTs = max(claimedTs, originTs)
             let expires = (content["expires"] as? NSNumber)?.int64Value ?? 14400000
-            if createdTs > 0 && createdTs + expires < nowMs {
+            let (deadline, overflowed) = createdTs.addingReportingOverflow(expires)
+            if expires <= 0 || overflowed || createdTs < 0 { continue }
+            if createdTs > 0 && deadline < nowMs {
                 continue
             }
             candidates.append(Candidate(createdTs: createdTs, sfuURL: serviceURL))
@@ -346,6 +384,7 @@ struct LiveKitCredentialService {
             detail: "LiveKit URL: \(decoded.url)",
             roomId: roomID
         )
+        guard Self.isAcceptableMediaURL(decoded.url) else { throw LiveKitCredentialError.insecureURL }
         return (decoded.url, decoded.jwt)
     }
 
@@ -385,6 +424,7 @@ struct LiveKitCredentialService {
             detail: "LiveKit URL: \(decoded.url)",
             roomId: roomID
         )
+        guard Self.isAcceptableMediaURL(decoded.url) else { throw LiveKitCredentialError.insecureURL }
         return (decoded.url, decoded.jwt)
     }
 
@@ -410,6 +450,9 @@ struct LiveKitCredentialService {
 enum LiveKitCredentialError: LocalizedError {
     case sfuURLNotFound
     case invalidURL
+    /// A call server or media server address that is not `https`/`wss`, or
+    /// that points at this Mac or its local network.
+    case insecureURL
     case serverError
     case openIDTokenFailed
     /// The LiveKit JWT service rejected our request. Carries the HTTP
@@ -425,6 +468,8 @@ enum LiveKitCredentialError: LocalizedError {
                    "Check that your server supports MatrixRTC (MSC4143)."
         case .invalidURL:
             return "Could not construct a valid URL for the call server."
+        case .insecureURL:
+            return "The call server advertised for this call is not a secure, public address, so Plic will not use it."
         case .serverError:
             return "The homeserver returned an error while fetching call credentials."
         case .openIDTokenFailed:
