@@ -582,7 +582,10 @@ final class AuthenticationService {
     func clearSession() {
         sessionDelegate.invalidate()
         KeychainService.delete()
-        Self.resetLocalSessionData()
+        // Everything, not only the stores: the search index holds decrypted
+        // text, and the next account must not inherit it, nor the key.
+        Self.resetAllLocalData()
+        KeychainService.deleteStoreKey()
         activityLog?.log(
             category: .auth, severity: .info, source: "AuthenticationService",
             summary: "Session cleared"

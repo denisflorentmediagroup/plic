@@ -297,6 +297,12 @@ nonisolated enum KeychainService: Sendable {
         delete(account: account)
     }
 
+    /// Deletes the store key. Done on sign-out, once the stores it protected
+    /// are gone: the next account gets a key of its own.
+    static func deleteStoreKey() {
+        delete(account: storeKeyAccount)
+    }
+
     /// Account-parameterised variant, for tests. See ``save(_:account:)``.
     static func delete(account: String) {
         let query: [String: Any] = [

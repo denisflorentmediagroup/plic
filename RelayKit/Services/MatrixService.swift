@@ -284,6 +284,8 @@ public final class MatrixService: MatrixServiceProtocol {
         auth.clearSession()
         await teardown()
         await forgetShareTargets()
+        // Room and user names from this session have no place in the next.
+        _activityLog.clear()
     }
 
     /// Discards unreadable local data and returns to the login screen.
