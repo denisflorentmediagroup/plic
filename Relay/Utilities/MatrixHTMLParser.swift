@@ -482,7 +482,9 @@ private struct MatrixHTMLParser { // swiftlint:disable:this type_body_length
                 case "ul":
                     listStack.append((ordered: false, counter: 0))
                 case "ol":
-                    let startValue = attributes["start"].flatMap(Int.init) ?? 1
+                    // Clamped: an unbounded start overflows the counter below,
+                    // and a list that starts past ten thousand is not a list.
+                    let startValue = attributes["start"].flatMap(Int.init).map { min(max($0, 0), 10_000) } ?? 1
                     listStack.append((ordered: true, counter: startValue - 1))
 
                 case "li":
