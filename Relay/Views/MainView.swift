@@ -540,6 +540,9 @@ struct MainView: View { // swiftlint:disable:this type_body_length
             guard let viewModel = await matrixService.makeCallViewModel(roomId: roomId) else {
                 callManager.isPreparingCredentials = false
                 callManager.callRoomId = nil
+                errorReporter.report(.callFailed(
+                    "Plic could not tell whether this room is encrypted, so it did not start the call. Try again in a moment."
+                ))
                 return
             }
 

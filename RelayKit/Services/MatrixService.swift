@@ -1655,15 +1655,18 @@ public final class MatrixService: MatrixServiceProtocol {
         guard let client = currentClient else { return nil }
         do {
             let session = try client.session()
-            let sdkRoom = room(id: roomId)
-            // Check if the Matrix room has encryption enabled to decide whether
-            // to use LiveKit-level E2EE for the call.
-            let isEncrypted: Bool
-            if let sdkRoom, let info = try? await sdkRoom.roomInfo() {
-                isEncrypted = info.encryptionState != .notEncrypted
-            } else {
-                isEncrypted = false
+            // Whether the room is encrypted decides whether the call's media
+            // is. Unknown is not "no": a call that silently went out in the
+            // clear because a lookup failed is the one outcome to avoid.
+            guard let sdkRoom = room(id: roomId), let info = try? await sdkRoom.roomInfo() else {
+                _activityLog.log(
+                    category: .call, severity: .error, source: "MatrixService",
+                    summary: "Call refused: the room's encryption state is unknown",
+                    roomId: roomId
+                )
+                return nil
             }
+            let isEncrypted = info.encryptionState != .notEncrypted
             let context = CallViewModel.EncryptionContext(
                 homeserver: client.homeserver,
                 accessToken: session.accessToken,
@@ -1684,13 +1687,11 @@ public final class MatrixService: MatrixServiceProtocol {
             return viewModel
         } catch {
             _activityLog.log(
-                category: .call, severity: .warning, source: "MatrixService",
-                summary: "Falling back to unencrypted call",
+                category: .call, severity: .error, source: "MatrixService",
+                summary: "Call refused: no session for the call",
                 detail: error.localizedDescription, roomId: roomId
             )
-            let viewModel = CallViewModel()
-            viewModel.activityLog = _activityLog
-            return viewModel
+            return nil
         }
     }
 
