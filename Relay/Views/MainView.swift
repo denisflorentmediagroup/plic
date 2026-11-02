@@ -107,6 +107,12 @@ struct MainView: View { // swiftlint:disable:this type_body_length
                 showQuickSwitch = true
             }
         }
+        .onChange(of: appActions.pendingRoomId) { _, roomId in
+            guard let roomId else { return }
+            appActions.pendingRoomId = nil
+            selectedSpaceId = nil
+            selectedRoomId = roomId
+        }
     }
 
     private var quickSwitchOverlay: some View {

@@ -154,6 +154,10 @@ struct RelayApp: App {
                 .onChange(of: matrixService.authState) { _, state in
                     if state == .loggedOut {
                         composeDraftStore.removeAll()
+                        // Delivered banners hold decrypted text; the last
+                        // room is the previous account's.
+                        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+                        selectedRoomId = nil
                     }
                 }
                 .onChange(of: notificationPreview, initial: true) {
@@ -177,7 +181,7 @@ struct RelayApp: App {
                     if let intent = activity.interaction?.intent as? INSendMessageIntent,
                        let roomId = intent.conversationIdentifier {
                         logger.info("Received share suggestion for room: \(roomId)")
-                        selectedRoomId = roomId
+                        appActions.pendingRoomId = roomId
                     }
                 }
                 .task {
@@ -206,6 +210,7 @@ struct RelayApp: App {
         let center = UNUserNotificationCenter.current()
         center.delegate = notificationDelegate
         notificationDelegate.matrixService = matrixService
+        notificationDelegate.appActions = appActions
         _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
 
         // Register the verification request notification category with an Accept action.
@@ -341,7 +346,7 @@ struct RelayApp: App {
         logger.info("Share handoff: \(share.filenames.count) file(s) for room \(share.roomId)")
 
         // Navigate to the target room.
-        selectedRoomId = share.roomId
+        appActions.pendingRoomId = share.roomId
 
         // Resolve file URLs from the app group container and stage them.
         let fileURLs = share.filenames.compactMap { PendingShareStore.fileURL(for: $0) }
@@ -393,6 +398,10 @@ final class AppActions {
     var showJoinRoom = false
     var showRoomDirectory = false
     var focusSearch = false
+    /// A room to open, asked for from outside the window: a notification, a
+    /// share from another app or a Share menu suggestion. The main view
+    /// takes it and clears it.
+    var pendingRoomId: String?
     var showQuickSwitch = false
 }
 
@@ -537,6 +546,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     nonisolated static let roomMessageCategoryIdentifier = "ROOM_MESSAGE"
 
     weak var matrixService: MatrixService?
+    weak var appActions: AppActions?
 
     /// Show notifications even when the app is in the foreground.
     ///
@@ -570,7 +580,9 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             let roomId = content.userInfo["roomId"] as? String
             await MainActor.run {
                 if let roomId {
+                    // For a window that is not up yet, and for one that is.
                     UserDefaults.standard.set(roomId, forKey: "selectedRoomId")
+                    appActions?.pendingRoomId = roomId
                 }
                 NSApp.activate()
                 if let window = NSApplication.shared.windows.first(where: { $0.canBecomeMain }) {
