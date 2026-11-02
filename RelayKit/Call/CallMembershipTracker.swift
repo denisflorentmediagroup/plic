@@ -46,7 +46,10 @@ nonisolated struct CallMembershipTracker {
     mutating func apply(event: [String: Any]) -> Bool {
         guard (event["type"] as? String) == CallEncryptionService.callMemberEventType,
               let stateKey = event["state_key"] as? String,
-              let sender = event["sender"] as? String
+              let sender = event["sender"] as? String,
+              // A member may only announce, or withdraw, their own devices:
+              // the state key is the sender's user ID or starts with it.
+              stateKey == sender || stateKey.hasPrefix("_\(sender)_")
         else { return false }
 
         let content = event["content"] as? [String: Any] ?? [:]

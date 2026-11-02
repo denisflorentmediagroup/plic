@@ -88,18 +88,18 @@ struct CallMembershipTrackerTests {
         #expect(tracker.targets(ownUserId: "@me:m.org", ownDeviceId: "PLIC", now: now).isEmpty)
     }
 
-    @Test("The sender decides whose device it is, never the content")
+    @Test("An event under someone else's state key counts for nobody")
     func senderIsAuthoritative() {
         var tracker = CallMembershipTracker()
-        // Mallory announces a device named like one of Alice's. The key may go
-        // to Mallory's device of that name — it can never be steered to Alice's.
+        // Mallory announces a device under Alice's state key. The event is
+        // dropped: it can neither steer a key to Alice's device nor earn
+        // Mallory one, since nothing says Mallory holds a device in the call.
         var forged = member("@mallory:x.org", "ALICEPHONE")
         forged["state_key"] = "_@alice:a.org_ALICEPHONE_m.call"
-        tracker.apply(event: forged)
+        let applied = tracker.apply(event: forged)
 
-        let targets = tracker.targets(ownUserId: "@me:m.org", ownDeviceId: "PLIC", now: now)
-        #expect(targets == ["@mallory:x.org": ["ALICEPHONE"]])
-        #expect(targets["@alice:a.org"] == nil)
+        #expect(!applied)
+        #expect(tracker.targets(ownUserId: "@me:m.org", ownDeviceId: "PLIC", now: now).isEmpty)
     }
 
     @Test("The legacy per-user format is understood")
@@ -127,5 +127,23 @@ struct CallMembershipTrackerTests {
         #expect(first)
         #expect(replay == false, "an identical event is not a change")
         #expect(unrelated == false)
+    }
+    @Test("A member can only announce or withdraw their own devices")
+    func stateKeyMustBelongToSender() {
+        var tracker = CallMembershipTracker()
+        tracker.apply(events: [member("@alice:a.org", "ALICEPHONE")])
+
+        // Mallory writes under Alice's state key: a departure, then a device.
+        var eviction = departure("@alice:a.org", "ALICEPHONE")
+        eviction["sender"] = "@mallory:m.org"
+        var takeover = member("@alice:a.org", "ALICEPHONE")
+        takeover["sender"] = "@mallory:m.org"
+
+        let evicted = tracker.apply(event: eviction)
+        let takenOver = tracker.apply(event: takeover)
+        #expect(!evicted)
+        #expect(!takenOver)
+        let targets = tracker.targets(ownUserId: "@me:m.org", ownDeviceId: "PLIC", now: now)
+        #expect(targets == ["@alice:a.org": ["ALICEPHONE"]])
     }
 }
