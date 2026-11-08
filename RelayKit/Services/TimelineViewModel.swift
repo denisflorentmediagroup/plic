@@ -94,6 +94,15 @@ final class TimelineViewModel: TimelineViewModelProtocol {
     @ObservationIgnored private var timelineHandle: TaskHandle?
     @ObservationIgnored private var paginationHandle: TaskHandle?
     @ObservationIgnored private var typingHandle: TaskHandle?
+    @ObservationIgnored private var identityHandle: TaskHandle?
+
+    /// Members whose encryption identity changed since this account last
+    /// trusted it, until the user acknowledges each.
+    private(set) var identityChanges: [IdentityChange] = []
+
+    /// The account's encryption, for pinning identities. `nil` in previews
+    /// and tests.
+    private let encryption: Encryption?
 
     /// Creates a new view model for the given room.
     ///
@@ -108,9 +117,11 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         unreadCount: Int = 0,
         notificationKeywords: [String] = [],
         errorReporter: ErrorReporter,
-        activityLog: ActivityLog? = nil
+        activityLog: ActivityLog? = nil,
+        encryption: Encryption? = nil
     ) {
         self.room = room
+        self.encryption = encryption
         self.roomId = room.id()
         self.roomLabel = room.canonicalAlias() ?? room.displayName() ?? room.id()
         self.currentUserId = currentUserId
@@ -724,6 +735,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         timelineHandle = nil
         paginationHandle = nil
         typingHandle = nil
+        identityHandle = nil
         sdkTimeline = nil
 
         // Clear raw SDK items but keep the mapped messages for instant display.
@@ -790,6 +802,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         paginationTask = nil
         timelineHandle = nil
         paginationHandle = nil
+        identityHandle = nil
         sdkTimeline = nil
         timelineItems = []
         messages = []
@@ -900,6 +913,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                 "\(label)"
             )
             self.timelineHandle = await tl.addListener(listener: listener)
+            await self.observeIdentityChanges()
             PerformanceSignposts.roomSwitch.endInterval(
                 PerformanceSignposts.RoomSwitchName.addListener,
                 addListenerState
@@ -1139,6 +1153,68 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             }
         }
         return false
+    }
+
+    // MARK: - Identity changes
+
+    /// Watches for members whose encryption identity changes.
+    ///
+    /// The SDK reports a member whose keys are no longer the ones this
+    /// account pinned or verified, and again once the user has accepted the
+    /// new ones. Without this, a replaced identity — an account reset, or a
+    /// server reading along — went unmentioned, and the room kept
+    /// encrypting to it.
+    private func observeIdentityChanges() async {
+        let listener = SDKListener<[IdentityStatusChange]> { [weak self] changes in
+            Task { @MainActor in await self?.apply(identityChanges: changes) }
+        }
+        do {
+            identityHandle = try await room.subscribeToIdentityStatusChanges(listener: listener)
+        } catch {
+            // An unencrypted room has no identities to watch.
+            identityHandle = nil
+        }
+    }
+
+    private func apply(identityChanges changes: [IdentityStatusChange]) async {
+        for change in changes {
+            switch change.changedTo {
+            case .pinViolation, .verificationViolation:
+                let wasVerified = change.changedTo == .verificationViolation
+                let displayName = try? await room.member(userId: change.userId).displayName
+                let entry = IdentityChange(userId: change.userId, displayName: displayName, wasVerified: wasVerified)
+                if let index = identityChanges.firstIndex(where: { $0.userId == change.userId }) {
+                    identityChanges[index] = entry
+                } else {
+                    identityChanges.append(entry)
+                }
+                activityLog?.log(
+                    category: .timeline, severity: .warning, source: "TimelineViewModel",
+                    summary: wasVerified ? "Verified identity changed" : "Member identity changed",
+                    metadata: ["roomId": roomId, "userId": change.userId]
+                )
+            case .pinned, .verified:
+                identityChanges.removeAll { $0.userId == change.userId }
+            }
+        }
+    }
+
+    func acknowledgeIdentityChange(userId: String) async {
+        guard let encryption,
+              let identity = try? await encryption.userIdentity(userId: userId, fallbackToServer: false) else {
+            identityChanges.removeAll { $0.userId == userId }
+            return
+        }
+        do {
+            if identity.hasVerificationViolation() {
+                try await identity.withdrawVerification()
+            } else {
+                try await identity.pin()
+            }
+            identityChanges.removeAll { $0.userId == userId }
+        } catch {
+            errorReporter.report(.verificationFailed(error.localizedDescription))
+        }
     }
 
     private func observeTypingNotifications() {

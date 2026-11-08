@@ -687,7 +687,8 @@ public final class MatrixService: MatrixServiceProtocol {
             unreadCount: Int(unreadCount),
             notificationKeywords: cachedNotificationKeywords,
             errorReporter: errorReporter,
-            activityLog: _activityLog
+            activityLog: _activityLog,
+            encryption: client?.encryption()
         )
         timelineViewModels[roomId] = vm
         touchTimelineAccessOrder(roomId)
@@ -704,7 +705,8 @@ public final class MatrixService: MatrixServiceProtocol {
             room: room,
             currentUserId: userId(),
             errorReporter: errorReporter,
-            activityLog: _activityLog
+            activityLog: _activityLog,
+            encryption: client?.encryption()
         )
     }
 

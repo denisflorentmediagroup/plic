@@ -170,6 +170,13 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             .opacity(successorRoomId != nil ? 0.5 : 1)
             .environment(\.mediaAutoReveal, shouldAutoRevealMedia)
             .environment(\.gifAnimationOverride, roomOverrides.animateGIFs)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !viewModel.identityChanges.isEmpty {
+                    IdentityChangeBanner(changes: viewModel.identityChanges) { userId in
+                        await viewModel.acknowledgeIdentityChange(userId: userId)
+                    }
+                }
+            }
             .overlay {
                 if !readOnly, let reply = compose.replyingTo {
                     ZStack {

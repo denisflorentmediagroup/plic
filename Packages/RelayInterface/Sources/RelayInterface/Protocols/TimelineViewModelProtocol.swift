@@ -187,4 +187,16 @@ public protocol TimelineViewModelProtocol: AnyObject, Observable {
     ///
     /// - Parameter eventId: The Matrix event ID of the message to unpin.
     func unpin(eventId: String) async
+
+    /// Members whose encryption identity changed and whom the user has not
+    /// yet acknowledged. Shown until each is.
+    var identityChanges: [IdentityChange] { get }
+
+    /// Accepts a member's new identity, as what this account now trusts.
+    func acknowledgeIdentityChange(userId: String) async
+}
+
+public extension TimelineViewModelProtocol {
+    var identityChanges: [IdentityChange] { [] }
+    func acknowledgeIdentityChange(userId: String) async {}
 }
