@@ -17,6 +17,23 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// A lightweight transferable payload for dragging a member between role sections.
+/// A role change dropped onto a section, awaiting the user's confirmation.
+private struct PendingRoleChange: Identifiable {
+    let userId: String
+    let name: String
+    let powerLevel: Int64
+
+    var id: String { userId }
+
+    var roleName: String {
+        switch powerLevel {
+        case 100...: "an administrator"
+        case 50...: "a moderator"
+        default: "a regular member"
+        }
+    }
+}
+
 private struct MemberDragItem: Codable, Sendable, Transferable {
     let userId: String
 
@@ -52,6 +69,7 @@ struct InspectorMembersTab: View {
 
     @State private var searchText = ""
     @State private var displayedProfile: UserProfile?
+    @State private var pendingRoleChange: PendingRoleChange?
 
 
     private var filteredMembers: [RoomMemberDetails] {
@@ -138,6 +156,31 @@ struct InspectorMembersTab: View {
         }
         .onChange(of: selectedProfile) {
             consumeExternalProfile()
+        }
+        .confirmationDialog(
+            pendingRoleChange.map { "Make \($0.name) \($0.roleName)?" } ?? "",
+            isPresented: Binding(
+                get: { pendingRoleChange != nil },
+                set: { if !$0 { pendingRoleChange = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRoleChange
+        ) { change in
+            Button(change.powerLevel >= 100 ? "Make Administrator" : "Change Role") {
+                Task {
+                    try? await viewModel.setMemberPowerLevel(
+                        userId: change.userId,
+                        powerLevel: change.powerLevel
+                    )
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { change in
+            if change.powerLevel >= 100 {
+                Text("An administrator can change the room however they like, and the change cannot be undone by anyone but another administrator.")
+            } else {
+                Text(change.userId)
+            }
         }
     }
 
@@ -312,25 +355,26 @@ struct InspectorMembersTab: View {
 
     // MARK: - Drag & Drop
 
+    /// Asks before applying a dropped role change. A drag item carries only a
+    /// user ID, which anything could have put on the pasteboard, so the user
+    /// confirms who is being promoted — and only members of the room can be.
     private func handleDrop(_ items: [MemberDragItem], powerLevel: Int64) -> Bool {
         guard canEditRoles, let item = items.first else { return false }
         // Don't allow dropping self
         guard item.userId != viewModel.currentUserId else { return false }
+        guard let member = viewModel.allMembers.first(where: { $0.userId == item.userId }) else { return false }
         // Don't drop into the same role section
-        if let member = viewModel.allMembers.first(where: { $0.userId == item.userId }) {
-            let currentPowerLevel: Int64 = switch member.role {
-            case .administrator: 100
-            case .moderator: 50
-            case .user: 0
-            }
-            guard currentPowerLevel != powerLevel else { return false }
+        let currentPowerLevel: Int64 = switch member.role {
+        case .administrator: 100
+        case .moderator: 50
+        case .user: 0
         }
-        Task {
-            try? await viewModel.setMemberPowerLevel(
-                userId: item.userId,
-                powerLevel: powerLevel
-            )
-        }
+        guard currentPowerLevel != powerLevel else { return false }
+        pendingRoleChange = PendingRoleChange(
+            userId: item.userId,
+            name: member.displayName ?? item.userId,
+            powerLevel: powerLevel
+        )
         return true
     }
 
