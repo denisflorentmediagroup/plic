@@ -17,8 +17,9 @@ import Testing
 
 @testable import Relay
 
-/// Pins that the decrypted copies earlier builds wrote are found and removed —
-/// and that nothing else in the temporary directory is.
+/// Pins that the plaintext copies Plic leaves in the temporary directory —
+/// decrypted media from earlier builds, staged attachments never sent — are
+/// found and removed at launch, and that nothing else is.
 struct DecryptedFileCleanupTests {
 
     private func scratch() throws -> URL {
@@ -31,7 +32,7 @@ struct DecryptedFileCleanupTests {
         try Data("x".utf8).write(to: directory.appending(path: name))
     }
 
-    @Test("Decrypted copies go, current and legacy names alike; nothing else does")
+    @Test("Decrypted and staged copies go, current and legacy names alike; nothing else does")
     func removesOnlyDecryptedCopies() throws {
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -39,15 +40,15 @@ struct DecryptedFileCleanupTests {
         try touch(dir, "decrypted-46cb4f7ee9ba69b9-voice.ogg")     // 0.5.33
         try touch(dir, "9c5c92e86244bd94-voice message.ogg")      // earlier builds: never deleted
         try touch(dir, "voice-3F2504E0-4F89-11D3-9A0C-0305E82C3301.ogg")          // a recording in progress
-        try touch(dir, "3F2504E0-4F89-11D3-9A0C-0305E82C3301-report.pdf")         // an attachment awaiting send
+        try touch(dir, "3F2504E0-4F89-11D3-9A0C-0305E82C3301-report.pdf")         // staged, then forgotten
+        try touch(dir, "3F2504E0-4F89-11D3-9A0C-0305E82C3301-Pasted Image.png")   // pasted, then forgotten
         try touch(dir, "unrelated.txt")
 
         let removed = MediaFileHelper.removeDecryptedFiles(in: dir)
         let left = try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
 
-        #expect(removed == 2)
+        #expect(removed == 4)
         #expect(left == [
-            "3F2504E0-4F89-11D3-9A0C-0305E82C3301-report.pdf",
             "unrelated.txt",
             "voice-3F2504E0-4F89-11D3-9A0C-0305E82C3301.ogg",
         ])

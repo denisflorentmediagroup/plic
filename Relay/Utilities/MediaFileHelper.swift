@@ -32,10 +32,11 @@ enum MediaFileHelper {
     /// clear, readable by anything with the disk.
     nonisolated static let decryptedFilePrefix = "decrypted-"
 
-    /// Deletes every decrypted copy earlier builds left in `directory`: the
-    /// prefixed names 0.5.33 wrote, and the unprefixed ones before it (sixteen
-    /// hex digits and a dash), which were never deleted at all. Called at
-    /// launch.
+    /// Deletes every plaintext copy left in `directory`: the decrypted copies
+    /// earlier builds wrote — the prefixed names of 0.5.33, and the unprefixed
+    /// ones before it (sixteen hex digits and a dash) — and the copies made of
+    /// outgoing attachments while they were staged, which nothing can still be
+    /// sending at launch. Called at launch.
     ///
     /// - Returns: How many files were removed.
     @discardableResult
@@ -56,7 +57,16 @@ enum MediaFileHelper {
         if name.hasPrefix(decryptedFilePrefix) { return true }
         // Legacy: `<16 hex digits>-<name>` from before the prefix existed.
         let head = name.prefix(17)
-        return head.count == 17 && head.last == "-" && head.dropLast().allSatisfy(\.isHexDigit)
+        if head.count == 17 && head.last == "-" && head.dropLast().allSatisfy(\.isHexDigit) { return true }
+        return isStagedCopy(name)
+    }
+
+    /// A copy of an attachment being sent: `<UUID>-<name>`, as the compose
+    /// bar writes them. Deleted after sending, and here if that never came.
+    nonisolated static func isStagedCopy(_ name: String) -> Bool {
+        let head = name.prefix(37)
+        guard head.count == 37, head.last == "-" else { return false }
+        return UUID(uuidString: String(head.dropLast())) != nil
     }
 
     /// Downloads media content and presents an NSSavePanel for saving to disk.

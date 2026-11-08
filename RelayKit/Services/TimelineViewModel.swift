@@ -498,6 +498,8 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         mimeType: String,
         inReplyTo: String? = nil
     ) async {
+        // The recording is a plaintext file: gone whichever way this ends.
+        defer { try? FileManager.default.removeItem(at: url) }
         guard let sdkTimeline else { return }
 
         let filename = url.lastPathComponent
@@ -529,11 +531,12 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             errorReporter.report(.attachmentSendFailed(filename: filename, reason: error.localizedDescription))
         }
 
-        try? FileManager.default.removeItem(at: url)
     }
 
     // swiftlint:disable:next function_body_length
     func sendAttachment(url: URL, caption: String? = nil, inReplyTo: String? = nil) async {
+        // The staged copy is a plaintext file: gone whichever way this ends.
+        defer { try? FileManager.default.removeItem(at: url) }
         guard let sdkTimeline else { return }
 
         let filename = url.lastPathComponent
@@ -686,7 +689,6 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             errorReporter.report(.attachmentSendFailed(filename: filename, reason: error.localizedDescription))
         }
 
-        try? FileManager.default.removeItem(at: url)
     }
 
     // MARK: - Timeline Lifecycle
