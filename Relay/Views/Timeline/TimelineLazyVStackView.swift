@@ -89,6 +89,9 @@ struct TimelineLazyVStackView: View {
     /// Extra bottom margin so content clears the compose bar overlay.
     var bottomContentMargin: CGFloat = 0
 
+    /// Extra top margin so content clears the identity-change banner overlay.
+    var topContentMargin: CGFloat = 0
+
     /// Whether the typing indicator overlay is shown. Drives an animated
     /// spacer at the bottom of the scroll content to smoothly push
     /// messages up when the indicator appears and ease them back down
@@ -180,6 +183,8 @@ struct TimelineLazyVStackView: View {
         }
         .contentMargins(.bottom, bottomContentMargin, for: .scrollContent)
         .contentMargins(.bottom, bottomContentMargin, for: .scrollIndicators)
+        .contentMargins(.top, topContentMargin, for: .scrollContent)
+        .contentMargins(.top, topContentMargin, for: .scrollIndicators)
         .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
             // Measure distance from the last actual content, ignoring the
             // bottom content inset (compose bar dead space). Using

@@ -67,6 +67,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     @State private var tableProxy = TimelineTableProxy()
     @State private var isNearBottom = true
     @State private var composeBarHeight: CGFloat = 0
+    @State private var identityBannerHeight: CGFloat = 0
     /// Keeps the last non-empty user list so the typing indicator
     /// content stays stable while the removal animation runs.
     @State private var displayedTypingUsers: [TypingUser] = []
@@ -149,6 +150,16 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
         roomOverrides.showMembershipEvents ?? globalShowMembershipEvents
     }
 
+    private func updateIdentityBannerHeight(_ height: CGFloat) {
+        guard height != identityBannerHeight else { return }
+        identityBannerHeight = height
+        if !timelineUseLazyVStack {
+            tableProxy.setContentInsets(NSEdgeInsets(
+                top: height, left: 0, bottom: composeBarHeight + 4, right: 0
+            ))
+        }
+    }
+
     private var showStateEvents: Bool {
         roomOverrides.showStateEvents ?? globalShowStateEvents
     }
@@ -170,11 +181,25 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             .opacity(successorRoomId != nil ? 0.5 : 1)
             .environment(\.mediaAutoReveal, shouldAutoRevealMedia)
             .environment(\.gifAnimationOverride, roomOverrides.animateGIFs)
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // An overlay, like the compose bar below, with its height fed to
+            // the list as a content inset. A safe-area inset here reached the
+            // table's scroll view as an automatic inset and sent its layout
+            // into a loop.
+            .overlay(alignment: .top) {
                 if !viewModel.identityChanges.isEmpty {
                     IdentityChangeBanner(changes: viewModel.identityChanges) { userId in
                         await viewModel.acknowledgeIdentityChange(userId: userId)
                     }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        updateIdentityBannerHeight(height)
+                    }
+                }
+            }
+            .onChange(of: viewModel.identityChanges.isEmpty) {
+                if viewModel.identityChanges.isEmpty {
+                    updateIdentityBannerHeight(0)
                 }
             }
             .overlay {
@@ -216,7 +241,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                             composeBarHeight = height
                             if !timelineUseLazyVStack {
                                 tableProxy.setContentInsets(NSEdgeInsets(
-                                    top: 0, left: 0, bottom: height + 4, right: 0
+                                    top: identityBannerHeight, left: 0, bottom: height + 4, right: 0
                                 ))
                             }
                             // Only scroll to bottom when the bar grows
@@ -666,6 +691,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                 hasReachedEnd: viewModel.hasReachedEnd,
                 isLive: viewModel.timelineFocus == .live,
                 bottomContentMargin: composeBarHeight + 4,
+                topContentMargin: identityBannerHeight,
                 typingIndicatorShown: isTypingRevealed,
                 scrollPosition: $lazyVStackScrollPosition
             )
