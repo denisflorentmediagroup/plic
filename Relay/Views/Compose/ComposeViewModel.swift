@@ -428,11 +428,48 @@ final class ComposeViewModel {
         var cursor = text.startIndex
         for (range, mention) in ranges {
             result += text[cursor..<range.lowerBound]
-            result += "[\(mention.displayName)](https://matrix.to/#/\(mention.userId))"
+            result += "[\(Self.markdownEscaped(mention.displayName))](https://matrix.to/#/\(mention.userId))"
             cursor = range.upperBound
         }
         result += text[cursor..<text.endIndex]
         return result
+    }
+
+    /// A display name as literal Markdown link text.
+    ///
+    /// Names come from the room, so one could end the link early and open
+    /// another — `x](https://evil) [y` — or carry HTML, and the user would
+    /// send it under their own name. Every ASCII punctuation mark is escaped,
+    /// which CommonMark allows, and line breaks become spaces.
+    static func markdownEscaped(_ name: String) -> String {
+        let punctuation = Set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+        var escaped = ""
+        for character in name {
+            if character.isNewline {
+                escaped.append(" ")
+            } else if punctuation.contains(character) {
+                escaped.append("\\")
+                escaped.append(character)
+            } else {
+                escaped.append(character)
+            }
+        }
+        return escaped
+    }
+
+    /// Drops a staged attachment, and the temporary copy made for it.
+    func removeAttachment(id: UUID) {
+        guard let index = attachments.firstIndex(where: { $0.id == id }) else { return }
+        let removed = attachments.remove(at: index)
+        try? FileManager.default.removeItem(at: removed.url)
+    }
+
+    /// Drops every staged attachment and its temporary copy.
+    func discardAttachments() {
+        for attachment in attachments {
+            try? FileManager.default.removeItem(at: attachment.url)
+        }
+        attachments = []
     }
 
     /// Returns the SF Symbol name for a file's UTType.

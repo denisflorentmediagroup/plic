@@ -47,6 +47,9 @@ final class ComposeDraftStore {
     /// would outlive the session that typed it and reappear for whoever signs
     /// in next, in any room they share.
     func removeAll() {
+        for draft in drafts.values {
+            draft.discardAttachments()
+        }
         drafts.removeAll()
     }
 }

@@ -46,7 +46,7 @@ struct AttachmentStagingView: View {
                         },
                         onRemove: {
                             withAnimation(.easeOut(duration: 0.15)) {
-                                compose.attachments.removeAll { $0.id == attachment.id }
+                                compose.removeAttachment(id: attachment.id)
                             }
                         }
                     )
