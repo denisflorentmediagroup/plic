@@ -27,7 +27,15 @@ nonisolated enum InMemoryAudio {
         case unreadable(OSStatus)
         /// The data opened but held no audio.
         case empty
+        /// The audio would decode to more than ``maximumSamples``.
+        case tooLong
     }
+
+    /// The most samples a decode may produce, across channels: twenty minutes
+    /// of mono at 48 kHz, about 230 MB as floats. A few compressed megabytes
+    /// — silence, at a high sample rate — would otherwise expand to gigabytes,
+    /// and a voice message decodes as soon as it is shown.
+    static let maximumSamples = 57_600_000
 
     /// Frames decoded per read while filling the result.
     private static let chunkFrames: AVAudioFrameCount = 32_768
@@ -84,8 +92,12 @@ nonisolated enum InMemoryAudio {
             guard status == noErr else { throw DecodingError.unreadable(status) }
             if frames == 0 { break }
             chunk.frameLength = frames
+            let (sum, overflowed) = total.addingReportingOverflow(frames)
+            guard !overflowed, Int(sum) * Int(format.channelCount) <= Self.maximumSamples else {
+                throw DecodingError.tooLong
+            }
             chunks.append(chunk)
-            total += frames
+            total = sum
         }
 
         guard total > 0,
