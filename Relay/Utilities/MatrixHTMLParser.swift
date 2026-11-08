@@ -854,15 +854,10 @@ private struct MatrixHTMLParser { // swiftlint:disable:this type_body_length
 
                     if tagString.hasPrefix("!--") {
                         // HTML comment — skip entirely.
-                        if let commentEnd = String(scalars[index...]).range(of: "-->") {
-                            let offset = String(scalars[index...]).distance(
-                                from: String(scalars[index...]).startIndex,
-                                to: commentEnd.upperBound
-                            )
-                            index = scalars.index(index, offsetBy: offset)
-                        } else {
-                            index = scalars.endIndex
-                        }
+                        // Found on the scalar view itself: copying the rest of
+                        // the message for every comment made a flood of them
+                        // quadratic.
+                        index = Self.endOfComment(in: scalars, from: afterLT) ?? scalars.endIndex
                         continue
                     } else if tagString.hasPrefix("!") || tagString.hasPrefix("?") {
                         // Doctype or processing instruction — skip.
@@ -890,9 +885,11 @@ private struct MatrixHTMLParser { // swiftlint:disable:this type_body_length
                     }
                     index = scalars.index(after: tagEnd)
                 } else {
-                    // Malformed: < without matching >. Treat as text.
-                    tokens.append(.text(String(scalars[index])))
-                    index = scalars.index(after: index)
+                    // No `>` anywhere ahead, so no tag can follow either: the
+                    // rest is text. Taking one character and rescanning would
+                    // cost the remainder again for every `<` in it.
+                    tokens.append(.text(decodeHTMLEntities(String(scalars[index...]))))
+                    index = scalars.endIndex
                 }
             } else {
                 // Accumulate text until the next tag.
@@ -908,6 +905,27 @@ private struct MatrixHTMLParser { // swiftlint:disable:this type_body_length
         }
 
         return tokens
+    }
+
+    /// The index just past the `-->` closing a comment whose `<!--` starts at
+    /// `start` (pointing at the `!`), or `nil` when it never closes.
+    private static func endOfComment(
+        in scalars: String.UnicodeScalarView, from start: String.UnicodeScalarView.Index
+    ) -> String.UnicodeScalarView.Index? {
+        var index = scalars.index(start, offsetBy: 3, limitedBy: scalars.endIndex) ?? scalars.endIndex
+        var dashes = 0
+        while index < scalars.endIndex {
+            let scalar = scalars[index]
+            index = scalars.index(after: index)
+            if scalar == "-" {
+                dashes += 1
+            } else if scalar == ">" && dashes >= 2 {
+                return index
+            } else {
+                dashes = 0
+            }
+        }
+        return nil
     }
 
     /// Parses the content inside `< ... >` into a tag name and attribute dictionary.

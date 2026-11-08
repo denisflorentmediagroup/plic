@@ -96,7 +96,10 @@ extension MessageTextView {
 
         // Replace mention link ranges with PillTextAttachment images.
         // Process in reverse order so earlier ranges stay valid.
-        for mention in mentionRanges.reversed() {
+        // Beyond this many, mentions stay plain links: each pill is a view of
+        // its own, and a message is not allowed to cost seconds to draw.
+        let maximumPills = 50
+        for mention in mentionRanges.prefix(maximumPills).reversed() {
             let isHighlightedUser = highlightedUserId != nil
                 && mention.uri.isUser
                 && mention.uri.identifier == highlightedUserId

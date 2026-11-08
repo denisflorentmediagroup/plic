@@ -36,9 +36,14 @@ enum MatrixIdentifierLinker {
     /// Scans `result` for bare Matrix identifiers that are not already
     /// linked, and sets their `.link` attribute to the corresponding
     /// `https://matrix.to` URL.
+    /// How many bare identifiers one message may turn into links. Each link
+    /// to a user or room becomes a pill with a view of its own, and a message
+    /// stuffed with ten thousand of them would take seconds to show.
+    static let maximumLinks = 50
+
     static func linkify(_ result: inout AttributedString) {
         let plain = String(result.characters)
-        for match in plain.matches(of: pattern) {
+        for match in plain.matches(of: pattern).prefix(maximumLinks) {
             let identifier = String(match.output.0)
             guard let attrRange = Range(match.range, in: result),
                   result[attrRange].link == nil,
