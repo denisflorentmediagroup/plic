@@ -86,6 +86,16 @@ enum RestoreOutcome {
 /// client is built at all.
 struct KeychainUnavailableError: Error {}
 
+/// The homeserver answered over plain `http`, which would carry the password
+/// and every access token in the clear.
+struct InsecureHomeserverError: LocalizedError {
+    let homeserver: String
+
+    var errorDescription: String? {
+        "\(homeserver) is not an https server. Plic only signs in over https."
+    }
+}
+
 @MainActor
 final class AuthenticationService {
 
@@ -469,12 +479,28 @@ final class AuthenticationService {
     ///   - password: The account password.
     ///   - homeserver: The homeserver URL or server name.
     /// - Returns: The authenticated ``ClientProxy`` and the user's Matrix ID.
+    /// Refuses a homeserver reached over anything but `https`.
+    ///
+    /// The SDK accepts whatever the server name's well-known file points at,
+    /// `http://` included, and the user typing a bare name would never see
+    /// it. Debug builds exempt this Mac and its network, where the test
+    /// server runs in the clear.
+    static func requireSecureHomeserver(_ homeserver: String) throws {
+        guard let url = URL(string: homeserver), url.scheme?.lowercased() == "https" else {
+            #if DEBUG
+            if let host = URL(string: homeserver)?.host(), LocalNetworkHost.contains(host) { return }
+            #endif
+            throw InsecureHomeserverError(homeserver: homeserver)
+        }
+    }
+
     func login(username: String, password: String, homeserver: String) async throws -> (ClientProxy, String) {
         Self.resetLocalSessionData()
 
         let client = try await makeBuilder()
             .serverNameOrHomeserverUrl(homeserver)
             .buildClient()
+        try Self.requireSecureHomeserver(client.homeserver())
 
         try await client.login(
             username: username,
@@ -520,6 +546,7 @@ final class AuthenticationService {
         let client = try await makeBuilder()
             .serverNameOrHomeserverUrl(homeserver)
             .buildClient()
+        try Self.requireSecureHomeserver(client.homeserver())
 
         let loginDetails = await client.homeserverLoginDetails()
         guard loginDetails.supportsOauthLogin() else {

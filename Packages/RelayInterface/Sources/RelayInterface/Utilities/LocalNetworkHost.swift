@@ -24,7 +24,8 @@ public enum LocalNetworkHost {
     /// 127.0.0.1. A public name that resolves or redirects to a private
     /// address is not caught here — that would need resolving it first.
     public static func contains(_ rawHost: String) -> Bool {
-        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        // `localhost.` is `localhost`; the trailing dot only stops search-domain completion.
+        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]."))
         // A single label (`router`, `nas`) is resolved on the local network.
         if host.isEmpty || (!host.contains(".") && !host.contains(":")) { return true }
         for suffix in [".local", ".localhost", ".internal", ".lan", ".home.arpa"] where host.hasSuffix(suffix) {
@@ -46,6 +47,11 @@ public enum LocalNetworkHost {
                 let mapped = UInt32(bytes[12]) << 24 | UInt32(bytes[13]) << 16 | UInt32(bytes[14]) << 8 | UInt32(bytes[15])
                 return isLocalIPv4(mapped)                                     // ::ffff:a.b.c.d
             }
+            if bytes[0..<12] == [0, 0x64, 0xFF, 0x9B, 0, 0, 0, 0, 0, 0, 0, 0] {
+                let translated = UInt32(bytes[12]) << 24 | UInt32(bytes[13]) << 16 | UInt32(bytes[14]) << 8 | UInt32(bytes[15])
+                return isLocalIPv4(translated)                                 // 64:ff9b::/96 NAT64
+            }
+            if bytes[0] == 0xFF { return true }                                // ff00::/8 multicast
         }
         return false
     }
@@ -59,6 +65,9 @@ public enum LocalNetworkHost {
             (0xA9FE_0000, 0xFFFF_0000), // 169.254.0.0/16 link-local
             (0xAC10_0000, 0xFFF0_0000), // 172.16.0.0/12
             (0xC0A8_0000, 0xFFFF_0000), // 192.168.0.0/16
+            (0xC612_0000, 0xFFFE_0000), // 198.18.0.0/15 benchmarking
+            (0xE000_0000, 0xF000_0000), // 224.0.0.0/4 multicast
+            (0xF000_0000, 0xF000_0000), // 240.0.0.0/4 reserved and broadcast
         ]
         return ranges.contains { network, mask in address & mask == network }
     }
