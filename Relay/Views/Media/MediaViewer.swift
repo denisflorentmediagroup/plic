@@ -67,6 +67,7 @@ enum MediaViewer {
             let view = PDFView()
             view.document = document
             view.autoScales = true
+            view.delegate = PDFLinkGate.shared
             view.displayMode = .singlePageContinuous
             window.contentView = view
             window.setContentSize(fitted(NSSize(width: 760, height: 980)))
@@ -195,5 +196,19 @@ private final class CenteringClipView: NSClipView {
             rect.origin.y = (document.frame.height - rect.height) / 2
         }
         return rect
+    }
+}
+
+/// Routes links clicked in a received PDF through the link policy.
+///
+/// Left to itself PDFKit opens any link annotation, whatever its scheme, so
+/// the policy applied to message text would not apply here — and an
+/// annotation can cover the whole page.
+private final class PDFLinkGate: NSObject, PDFViewDelegate {
+    static let shared = PDFLinkGate()
+
+    func pdfViewWillClick(onLink sender: PDFView, with url: URL) {
+        guard LinkPolicy.opensOutside(url) else { return }
+        NSWorkspace.shared.open(url)
     }
 }

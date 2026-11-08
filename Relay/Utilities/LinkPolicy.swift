@@ -29,12 +29,19 @@ import AppKit
 /// adds a link later.
 enum LinkPolicy {
     /// Web, mail and torrent links, and `matrix:` URIs, which Plic resolves
-    /// itself and never passes to `NSWorkspace`.
-    static let allowedSchemes: Set<String> = ["https", "http", "ftp", "mailto", "magnet", "matrix"]
+    /// itself and never passes to `NSWorkspace`. Not `ftp`: Finder answers it
+    /// by mounting the server, the same hostile-share risk as `smb` or `afp`.
+    static let allowedSchemes: Set<String> = ["https", "http", "mailto", "magnet", "matrix"]
 
     static func isOpenable(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         return allowedSchemes.contains(scheme)
+    }
+
+    /// Whether a link may be handed to another app. `matrix:` is openable in
+    /// Plic but has no meaning outside it.
+    static func opensOutside(_ url: URL) -> Bool {
+        isOpenable(url) && url.scheme?.lowercased() != "matrix"
     }
 
     /// The link attribute's value as a URL, whichever form it was stored in.
