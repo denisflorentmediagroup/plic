@@ -391,15 +391,10 @@ final class ComposeViewModel {
     private func generateThumbnail(for url: URL) -> NSImage? {
         let utType = UTType(filenameExtension: url.pathExtension) ?? .data
         guard utType.conforms(to: .image) else { return nil }
-        guard let image = NSImage(contentsOf: url) else { return nil }
-        let maxDimension: CGFloat = 160
-        let size = image.size
-        let scale = min(maxDimension / size.width, maxDimension / size.height, 1.0)
-        let targetSize = NSSize(width: size.width * scale, height: size.height * scale)
-        return NSImage(size: targetSize, flipped: false) { rect in
-            image.draw(in: rect)
-            return true
-        }
+        // ImageIO builds the thumbnail from the file without decoding the
+        // whole photo: a 48-megapixel shot cost 192 MB on the main thread.
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return ImageDecoding.thumbnail(from: data, maxPixelSize: 160)
     }
 
     /// Converts the draft text + mentions into markdown with Matrix.to links.
