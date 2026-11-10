@@ -114,7 +114,7 @@ struct TimelineRowView: View, Equatable {
         .environment(\.swipeIsLocked, swipeIsLocked)
         .opacity(shouldAnimate ? 0 : 1)
         .animation(
-            isNewlyAppended ? .easeOut(duration: 0.1) : nil,
+            isNewlyAppended && !reduceMotion ? .easeOut(duration: 0.1) : nil,
             value: didAppear
         )
         .onAppear {

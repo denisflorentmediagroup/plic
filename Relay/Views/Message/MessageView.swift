@@ -61,6 +61,40 @@ struct MessageView: View {
         bubbleContent
             .offset(x: swipeOffset)
             .frame(maxWidth: .infinity, alignment: message.isOutgoing ? .trailing : .leading)
+            // One element per message for VoiceOver: who, what, when. Content
+            // with controls of its own — a poll, a thread, a failed send — stays
+            // a container so those controls remain reachable.
+            .accessibilityElement(children: hasInteractiveContent ? .contain : .combine)
+            .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var hasInteractiveContent: Bool {
+        message.poll != nil || message.location != nil || message.threadSummary != nil
+            || message.sendState != nil || !message.reactions.isEmpty
+    }
+
+    private var accessibilityDescription: String {
+        var parts: [String] = [message.isOutgoing ? "You" : message.displayName]
+        switch message.kind {
+        case .image: parts.append("Image. \(message.body)")
+        case .video: parts.append("Video. \(message.body)")
+        case .audio: parts.append(message.mediaInfo?.isVoiceMessage == true ? "Voice message" : "Audio. \(message.body)")
+        case .file: parts.append("File. \(message.body)")
+        case .sticker: parts.append("Sticker. \(message.body)")
+        case .poll: parts.append("Poll. \(message.body)")
+        case .location: parts.append("Location. \(message.body)")
+        default: parts.append(message.body)
+        }
+        if message.isEdited { parts.append("Edited") }
+        if let reply = message.replyDetail, !reply.body.isEmpty {
+            parts.append("In reply to \(reply.senderDisplayName ?? reply.senderID)")
+        }
+        if !message.reactions.isEmpty {
+            let total = message.reactions.reduce(0) { $0 + $1.count }
+            parts.append(total == 1 ? "1 reaction" : "\(total) reactions")
+        }
+        parts.append(message.timestamp.formatted(date: .omitted, time: .shortened))
+        return parts.joined(separator: ". ")
     }
 
     // MARK: - Bubble Content

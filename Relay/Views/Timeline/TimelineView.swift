@@ -72,6 +72,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     @State private var messageToDelete: TimelineMessage?
     @State private var messageToReport: TimelineMessage?
     @State private var messageToForward: TimelineMessage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var tableProxy = TimelineTableProxy()
     @State private var isNearBottom = true
@@ -227,7 +228,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                             .fill(.ultraThinMaterial)
                             .ignoresSafeArea()
                             .onTapGesture {
-                                withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+                                withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
                                     compose.cancelReply()
                                 }
                             }
@@ -641,7 +642,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             }
         }
         actions.reply = { message in
-            withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
                 self.compose.replyingTo = message
             }
         }
@@ -936,7 +937,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     private func handleContextAction(_ action: TimelineRowContextAction) {
         switch action {
         case .reply(let message):
-            withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
                 compose.replyingTo = message
             }
         case .replyInThread(let message):

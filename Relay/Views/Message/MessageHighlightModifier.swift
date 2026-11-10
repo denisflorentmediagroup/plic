@@ -26,6 +26,7 @@ struct MessageHighlightModifier: ViewModifier {
     var onComplete: (() -> Void)?
 
     @State private var scale: CGFloat = 1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -40,6 +41,14 @@ struct MessageHighlightModifier: ViewModifier {
     }
 
     private func runBounce() {
+        // With Reduce Motion on, the highlight colour alone marks the message.
+        if reduceMotion {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.6))
+                onComplete?()
+            }
+            return
+        }
         // First bounce: scale up
         withAnimation(.spring(duration: 0.15, bounce: 0.3)) {
             scale = 1.06

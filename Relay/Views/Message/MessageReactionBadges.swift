@@ -47,6 +47,7 @@ struct MessageReactionBadges: View {
     private static let hoverScale: CGFloat = 1.25
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let step = isHovering ? Self.expandedStep : Self.collapsedStep
@@ -79,7 +80,7 @@ struct MessageReactionBadges: View {
         )
         .scaleEffect(isHovering ? Self.hoverScale : 1.0)
         .onHover { hovering in
-            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.2)) {
                 isHovering = hovering
             }
         }
