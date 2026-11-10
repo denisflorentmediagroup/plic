@@ -584,7 +584,7 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
     /// in the timeline as a second "started a call" message from the same sender.
     /// This filters out those duplicates, keeping only the first occurrence in each
     /// consecutive run.
-    private static func deduplicateCallEvents(_ messages: [TimelineMessage]) -> [TimelineMessage] {
+    nonisolated static func deduplicateCallEvents(_ messages: [TimelineMessage]) -> [TimelineMessage] {
         var result: [TimelineMessage] = []
         for message in messages {
             if message.kind == .callEvent,
