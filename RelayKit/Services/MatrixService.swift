@@ -48,6 +48,18 @@ public final class MatrixService: MatrixServiceProtocol {
     public var pendingDeepLink: MatrixURI?
     public let errorReporter = ErrorReporter()
 
+    /// Called with the room when a call starts in it. The app rings and
+    /// posts a notification; the service only reports.
+    public var onCallStarted: ((RelayInterface.RoomSummary) -> Void)? {
+        didSet {
+            let handler = onCallStarted
+            roomListManager.onCallStarted = { [weak self] roomId in
+                guard let self, let summary = self.rooms.first(where: { $0.id == roomId }) else { return }
+                handler?(summary)
+            }
+        }
+    }
+
     /// Callback invoked when a room has new notification-worthy unread activity.
     ///
     /// The app layer sets this to post system notifications. The callback

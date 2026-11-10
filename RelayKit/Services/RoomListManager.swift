@@ -72,6 +72,8 @@ final class RoomListManager {
     ///
     /// The app layer uses this to post system notifications.
     var onNotificationEvent: ((RoomNotificationEvent) -> Void)?
+    /// Called with the room ID when a call starts in a room that had none.
+    var onCallStarted: ((String) -> Void)?
 
     /// The signed-in user's Matrix ID, used for client-side highlight detection.
     var currentUserId: String?
@@ -235,6 +237,7 @@ final class RoomListManager {
             activityLog: activityLog,
             onInfoUpdated: { [weak self] in self?.scheduleResort() },
             onNotificationEvent: { [weak self] event in self?.onNotificationEvent?(event) },
+            onCallStarted: { [weak self] roomId in self?.onCallStarted?(roomId) },
             highlightContextProvider: { [weak self] in
                 (userId: self?.currentUserId, keywords: self?.notificationKeywords ?? [])
             }
@@ -417,6 +420,7 @@ private final class RoomEntry: Identifiable {
     @ObservationIgnored private weak var activityLog: ActivityLog?
 
     @ObservationIgnored private var onNotificationEvent: ((RoomNotificationEvent) -> Void)?
+    @ObservationIgnored private var onCallStarted: ((String) -> Void)?
     @ObservationIgnored private var highlightContextProvider: (() -> (userId: String?, keywords: [String]))?
     /// The timestamp (ms) of the last event we fired a notification for.
     @ObservationIgnored private var lastNotifiedEventTimestamp: UInt64 = 0
@@ -432,6 +436,7 @@ private final class RoomEntry: Identifiable {
         activityLog: ActivityLog? = nil,
         onInfoUpdated: (() -> Void)? = nil,
         onNotificationEvent: ((RoomNotificationEvent) -> Void)? = nil,
+        onCallStarted: ((String) -> Void)? = nil,
         highlightContextProvider: (() -> (userId: String?, keywords: [String]))? = nil
     ) {
         self.id = room.id()
@@ -439,6 +444,7 @@ private final class RoomEntry: Identifiable {
         self.activityLog = activityLog
         self.onInfoUpdated = onInfoUpdated
         self.onNotificationEvent = onNotificationEvent
+        self.onCallStarted = onCallStarted
         self.highlightContextProvider = highlightContextProvider
         self.summary = RelayInterface.RoomSummary(
             id: room.id(),
@@ -546,6 +552,11 @@ private final class RoomEntry: Identifiable {
         summary.pinnedEventIds = info.pinnedEventIds
         summary.isFavourite = info.isFavourite
         summary.successorRoomId = info.successorRoom?.roomId
+        // A call that was not there a moment ago is one to announce; one
+        // found already running at launch is not.
+        if info.hasRoomCall, !summary.hasRoomCall, hasReceivedInitialInfo, !isInitialFetch {
+            onCallStarted?(id)
+        }
         summary.hasRoomCall = info.hasRoomCall
 
         // Map SDK membership to RelayInterface type

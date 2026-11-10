@@ -149,6 +149,14 @@ struct RelayApp: App {
                     }
                 }
                 .background(GlassWindowConfigurator(usesGlass: appearanceMode.usesGlass))
+                .onChange(of: callManager.hasActiveCall) { _, active in
+                    if active { CallRinger.shared.stop() }
+                }
+                .onChange(of: selectedRoomId) {
+                    // Opening a room answers its ring, whether or not the
+                    // user then joins.
+                    CallRinger.shared.stop()
+                }
                 .onChange(of: dockBadgeCount) { _, newCount in
                     NSApp.dockTile.badgeLabel = newCount > 0 ? "\(newCount)" : nil
                 }
@@ -193,6 +201,11 @@ struct RelayApp: App {
                     matrixService.onNotificationEvent = { event in
                         Task { @MainActor in
                             self.handleNotificationEvent(event)
+                        }
+                    }
+                    matrixService.onCallStarted = { room in
+                        Task { @MainActor in
+                            self.handleCallStarted(in: room)
                         }
                     }
                 }
@@ -272,6 +285,32 @@ struct RelayApp: App {
                 }
             }
         }
+    }
+
+    /// Announces a call that just started in a room: a notification that
+    /// opens the room, and for a direct chat a ring, unless the user is
+    /// already on a call or has that room in front of them.
+    private func handleCallStarted(in room: RoomSummary) {
+        guard !callManager.hasActiveCall, room.notificationMode != .mute else { return }
+        let isWatching = NSApp.isActive && selectedRoomId == room.id
+        if room.isDirect && !isWatching {
+            CallRinger.shared.start()
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = room.isDirect ? "\(room.name) is calling" : "Call in \(room.name)"
+        content.body = "Open the room to join."
+        content.sound = room.isDirect ? nil : .default
+        content.threadIdentifier = room.id
+        content.userInfo = ["roomId": room.id]
+        content.categoryIdentifier = NotificationDelegate.roomMessageCategoryIdentifier
+        content.interruptionLevel = isWatching ? .passive : .timeSensitive
+        let request = UNNotificationRequest(
+            identifier: "call-\(room.id)-\(Date.now.timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     /// Handles a notification event from the room list manager.
