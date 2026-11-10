@@ -311,6 +311,8 @@ public final class MatrixService: MatrixServiceProtocol {
     private func forgetShareTargets() async {
         roomCacheWriteTask?.cancel()
         roomCacheWriteTask = nil
+        shareAvatarData = [:]
+        lastWrittenShareableRooms = nil
         PendingShareStore.removeAll()
         await intentDonation.removeAllDonations()
     }
@@ -568,6 +570,12 @@ public final class MatrixService: MatrixServiceProtocol {
     // MARK: - Room Cache for Share Extension
 
     @ObservationIgnored private var roomCacheWriteTask: Task<Void, Never>?
+    /// Avatar bytes already read for the share cache, by `mxc://` URL. The
+    /// room list rebuilds on every message in any room, and each rebuild
+    /// used to read every avatar from disk again.
+    @ObservationIgnored private var shareAvatarData: [String: Data?] = [:]
+    /// What was last written, so an identical snapshot is not written twice.
+    @ObservationIgnored private var lastWrittenShareableRooms: [RelayInterface.ShareableRoom]?
 
     /// Writes the room list to the app group container after a short debounce.
     ///
@@ -588,7 +596,12 @@ public final class MatrixService: MatrixServiceProtocol {
                 guard !Task.isCancelled else { return }
                 var avatarData: Data?
                 if let mxcURL = room.avatarURL {
-                    avatarData = await self.media.cachedAvatarData(mxcURL: mxcURL, size: 48)
+                    if let known = self.shareAvatarData[mxcURL] {
+                        avatarData = known
+                    } else {
+                        avatarData = await self.media.cachedAvatarData(mxcURL: mxcURL, size: 48)
+                        if avatarData != nil { self.shareAvatarData[mxcURL] = avatarData }
+                    }
                 }
                 shareableRooms.append(RelayInterface.ShareableRoom(
                     id: room.id,
@@ -599,6 +612,8 @@ public final class MatrixService: MatrixServiceProtocol {
                 ))
             }
 
+            guard shareableRooms != self.lastWrittenShareableRooms else { return }
+            self.lastWrittenShareableRooms = shareableRooms
             PendingShareStore.writeRoomCache(shareableRooms)
         }
     }

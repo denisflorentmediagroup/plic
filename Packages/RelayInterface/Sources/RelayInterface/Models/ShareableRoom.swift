@@ -19,7 +19,7 @@ import Foundation
 /// The main app periodically writes an array of ``ShareableRoom`` to the app group
 /// container. The share extension reads this cache on launch to display the room list
 /// without needing to initialise the Matrix SDK.
-public struct ShareableRoom: Codable, Sendable, Identifiable {
+public struct ShareableRoom: Codable, Sendable, Identifiable, Equatable {
     /// The Matrix room ID.
     public let id: String
 
