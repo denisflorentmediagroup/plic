@@ -524,6 +524,20 @@ public protocol MatrixServiceProtocol: AnyObject, Observable {
     /// Returns the current encryption, key backup, and recovery state.
     func encryptionState() async -> EncryptionStatus
 
+    /// Sets up account recovery: turns on key backup if it is off, and
+    /// creates the recovery key that protects it. Returns that key, to be
+    /// shown once and written down.
+    func enableRecovery() async throws -> String
+
+    /// Completes recovery on this session with a key made elsewhere.
+    func recover(recoveryKey: String) async throws
+
+    /// Replaces the recovery key with a new one, returned to be shown once.
+    func resetRecoveryKey() async throws -> String
+
+    /// Turns on key backup for an account whose recovery is already set up.
+    func enableKeyBackup() async throws
+
     /// Whether other verified devices exist that this device can verify against interactively.
     ///
     /// Returns `false` when this is the user's only device or no other devices have been
@@ -896,6 +910,10 @@ public extension MatrixServiceProtocol {
     }
 
     // Defaults for mocks and previews, which have no account behind them.
+    func enableRecovery() async throws -> String { "" }
+    func recover(recoveryKey: String) async throws {}
+    func resetRecoveryKey() async throws -> String { "" }
+    func enableKeyBackup() async throws {}
     func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult] { [] }
     var defaultDirectNotificationMode: DefaultNotificationMode { .allMessages }
     var defaultGroupNotificationMode: DefaultNotificationMode { .mentionsAndKeywordsOnly }

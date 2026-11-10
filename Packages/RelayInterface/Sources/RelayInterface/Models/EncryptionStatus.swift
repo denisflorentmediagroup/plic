@@ -14,21 +14,37 @@
 
 import Foundation
 
+/// Where account recovery stands for this account.
+public enum RecoveryStatus: Sendable, Equatable {
+    /// Not yet known: the client has not finished checking.
+    case unknown
+    /// A recovery key exists and this session holds the secrets it protects.
+    case enabled
+    /// No recovery key has been set up.
+    case disabled
+    /// A recovery key exists, set up on another session, and this session
+    /// does not have the secrets yet: entering the key completes it.
+    case incomplete
+}
+
 /// Summary of the client's encryption, key backup, and recovery state.
 public struct EncryptionStatus: Sendable {
     /// Whether server-side key backup is active, allowing message keys to be recovered on new sessions.
     public let backupEnabled: Bool
 
+    /// Where account recovery stands.
+    public let recovery: RecoveryStatus
+
     /// Whether account recovery (via a recovery key or passphrase) has been configured.
-    public let recoveryEnabled: Bool
+    public var recoveryEnabled: Bool { recovery == .enabled }
 
     /// Creates a new ``EncryptionStatus`` value.
     ///
     /// - Parameters:
     ///   - backupEnabled: `true` when key backup is enabled on the server.
-    ///   - recoveryEnabled: `true` when account recovery has been set up.
-    nonisolated public init(backupEnabled: Bool = false, recoveryEnabled: Bool = false) {
+    ///   - recovery: where account recovery stands.
+    nonisolated public init(backupEnabled: Bool = false, recovery: RecoveryStatus = .unknown) {
         self.backupEnabled = backupEnabled
-        self.recoveryEnabled = recoveryEnabled
+        self.recovery = recovery
     }
 }

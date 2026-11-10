@@ -251,7 +251,7 @@ final class PreviewMatrixService: MatrixServiceProtocol {
     }
 
     func isCurrentSessionVerified() async -> Bool { true }
-    func encryptionState() async -> EncryptionStatus { EncryptionStatus(backupEnabled: true, recoveryEnabled: true) }
+    func encryptionState() async -> EncryptionStatus { EncryptionStatus(backupEnabled: true, recovery: .enabled) }
     func hasDevicesToVerifyAgainst() async throws -> Bool { false }
     func recoverWithKey(_ recoveryKey: String) async throws {}
 

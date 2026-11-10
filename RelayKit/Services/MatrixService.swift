@@ -1826,9 +1826,58 @@ public final class MatrixService: MatrixServiceProtocol {
     public func encryptionState() async -> EncryptionStatus {
         guard let client = currentClient else { return EncryptionStatus() }
         let encryption = client.encryption()
+        let recovery: RecoveryStatus = switch encryption.recoveryState() {
+        case .enabled: .enabled
+        case .disabled: .disabled
+        case .incomplete: .incomplete
+        case .unknown: .unknown
+        }
         return EncryptionStatus(
             backupEnabled: encryption.backupState() == .enabled,
-            recoveryEnabled: encryption.recoveryState() == .enabled
+            recovery: recovery
+        )
+    }
+
+    public func enableRecovery() async throws -> String {
+        let client = try requireClient()
+        // Progress is not shown: the key is what the user waits for, and
+        // the upload of existing keys continues on its own afterwards.
+        let listener = SDKListener<EnableRecoveryProgress> { _ in }
+        let key = try await client.encryption().enableRecovery(
+            waitForBackupsToUpload: false, passphrase: nil, progressListener: listener
+        )
+        _activityLog.log(
+            category: .auth, severity: .info, source: "MatrixService",
+            summary: "Recovery set up and key backup enabled"
+        )
+        return key
+    }
+
+    public func recover(recoveryKey: String) async throws {
+        let client = try requireClient()
+        try await client.encryption().recover(recoveryKey: recoveryKey.trimmingCharacters(in: .whitespacesAndNewlines))
+        _activityLog.log(
+            category: .auth, severity: .info, source: "MatrixService",
+            summary: "Recovered secrets with the recovery key"
+        )
+    }
+
+    public func resetRecoveryKey() async throws -> String {
+        let client = try requireClient()
+        let key = try await client.encryption().resetRecoveryKey()
+        _activityLog.log(
+            category: .auth, severity: .info, source: "MatrixService",
+            summary: "Recovery key replaced"
+        )
+        return key
+    }
+
+    public func enableKeyBackup() async throws {
+        let client = try requireClient()
+        try await client.encryption().enableBackups()
+        _activityLog.log(
+            category: .auth, severity: .info, source: "MatrixService",
+            summary: "Key backup enabled"
         )
     }
 
