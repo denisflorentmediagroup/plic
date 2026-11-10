@@ -55,7 +55,7 @@ final class SyncManager {
     /// External events that can affect whether the sync service should be
     /// running. All events are funnelled into a single ``AsyncStream`` and
     /// processed sequentially.
-    private enum ConnectivityInput: CustomStringConvertible {
+    enum ConnectivityInput: CustomStringConvertible {
         case networkOnline
         case networkOffline
         case systemWillSleep
@@ -79,7 +79,7 @@ final class SyncManager {
     /// previous `isRebuilding`, `isPendingOnlineRestore`, and
     /// `hasCompletedInitialSync` boolean flags with an explicit enum that
     /// makes invalid state combinations unrepresentable.
-    private enum LifecyclePhase: CustomStringConvertible {
+    enum LifecyclePhase: CustomStringConvertible {
         /// No sync service has been started yet.
         case idle
         /// Sync service is running normally.
@@ -338,164 +338,146 @@ final class SyncManager {
 
     // MARK: - State Machine
 
-    /// The core state transition function. Dispatches on `(phase, input)`
-    /// to determine the correct action and new phase.
-    private func processInput(_ input: ConnectivityInput) async {
+    /// What the state machine does for one input in one phase.
+    ///
+    /// The decision is pure and separate from its execution so the whole
+    /// table can be pinned by tests without a network, a sync service or
+    /// a sleeping Mac.
+    enum Action: Equatable {
+        case ignore
+        /// Stop the sync service and publish `.offline`.
+        case tearDownForOffline
+        /// Same, then retry with backoff: the SDK gave up, not the network.
+        case tearDownForOfflineAndReconnect
+        /// Stop the sync service without publishing `.offline`.
+        case tearDownForSleep
+        case publishRunning
+        /// The SDK will not come back; `backToActive` leaves a rebuild.
+        case publishTerminated(backToActive: Bool)
+        /// Asleep and the network left: publish `.offline` for when the user returns.
+        case goOffline
+        case rebuildAfterWake
+        case rebuildAfterOnline
+        /// An SDK error or offline report while rebuilding; the rebuild handles it.
+        case suppressDuringRebuild
+        case retryPendingRestore
+    }
+
+    /// The transition table: `(phase, input)` to ``Action``.
+    nonisolated static func action(for input: ConnectivityInput, in phase: LifecyclePhase) -> Action {
         switch (phase, input) {
 
         // ── Active ──────────────────────────────────────────────────
 
-        case (.active, .networkOffline):
-            await tearDownSyncForOffline()
-
-        case (.active, .systemWillSleep):
-            await tearDownSyncForSleep()
-
-        case (.active, .sdkState(.running)):
-            syncState = .running
-            activityLog.log(
-                category: .sync, severity: .info, source: "SyncManager",
-                summary: "Sync state: running"
-            )
-
-        case (.active, .sdkState(.idle)):
-            break
-
-        case (.active, .sdkState(.offline)):
-            activityLog.log(
-                category: .sync, severity: .warning, source: "SyncManager",
-                summary: "SDK reported offline — transitioning to offline + backoff retry"
-            )
-            await tearDownSyncForOffline()
-            scheduleReconnect()
-
-        case (.active, .sdkState(.terminated)):
-            activityLog.log(
-                category: .sync, severity: .error, source: "SyncManager",
-                summary: "Sync service terminated"
-            )
-            syncState = .error("The sync service was terminated.")
-
-        case (.active, .sdkState(.error)):
-            activityLog.log(
-                category: .sync, severity: .error, source: "SyncManager",
-                summary: "SDK sync error — transitioning to offline + backoff retry"
-            )
-            await tearDownSyncForOffline()
-            scheduleReconnect()
-
-        case (.active, .networkOnline),
-             (.active, .reconnectTimerFired):
-            break // Already active, nothing to do
+        case (.active, .networkOffline): .tearDownForOffline
+        case (.active, .systemWillSleep): .tearDownForSleep
+        case (.active, .sdkState(.running)): .publishRunning
+        case (.active, .sdkState(.idle)): .ignore
+        case (.active, .sdkState(.offline)), (.active, .sdkState(.error)): .tearDownForOfflineAndReconnect
+        case (.active, .sdkState(.terminated)): .publishTerminated(backToActive: false)
+        case (.active, .networkOnline), (.active, .reconnectTimerFired): .ignore
 
         // ── Sleeping ────────────────────────────────────────────────
 
-        case (.sleeping, .systemDidWake):
-            await rebuildAfterWake()
-
-        case (.sleeping, .networkOffline):
-            // Network went away while we were sleeping. Publish
-            // offline so the banner appears when the user returns.
-            transitionPhase(to: .offline)
-            syncState = .offline
-
-        case (.sleeping, .networkOnline),
-             (.sleeping, .systemWillSleep),
-             (.sleeping, .sdkState),
-             (.sleeping, .reconnectTimerFired):
-            break // Wait for wake
+        case (.sleeping, .systemDidWake): .rebuildAfterWake
+        case (.sleeping, .networkOffline): .goOffline
+        case (.sleeping, .networkOnline), (.sleeping, .systemWillSleep),
+             (.sleeping, .sdkState), (.sleeping, .reconnectTimerFired): .ignore
 
         // ── Offline ─────────────────────────────────────────────────
 
-        case (.offline, .networkOnline):
-            await rebuildAfterOnline()
-
-        case (.offline, .reconnectTimerFired):
-            await rebuildAfterOnline()
-
-        case (.offline, .networkOffline),
-             (.offline, .sdkState),
-             (.offline, .systemWillSleep),
-             (.offline, .systemDidWake):
-            break // Already offline, sync is stopped
+        case (.offline, .networkOnline), (.offline, .reconnectTimerFired): .rebuildAfterOnline
+        case (.offline, .networkOffline), (.offline, .sdkState),
+             (.offline, .systemWillSleep), (.offline, .systemDidWake): .ignore
 
         // ── Rebuilding ──────────────────────────────────────────────
 
-        case (.rebuilding, .sdkState(.running)):
-            // Rebuild succeeded — the SDK reached running state.
-            // waitForFirstSync() will pick this up and complete.
+        case (.rebuilding, .sdkState(.running)): .publishRunning
+        case (.rebuilding, .sdkState(.error)), (.rebuilding, .sdkState(.offline)): .suppressDuringRebuild
+        case (.rebuilding, .sdkState(.terminated)): .publishTerminated(backToActive: true)
+        case (.rebuilding, .networkOffline): .tearDownForOffline
+        case (.rebuilding, .systemWillSleep): .tearDownForSleep
+        case (.rebuilding, .sdkState(.idle)), (.rebuilding, .networkOnline),
+             (.rebuilding, .reconnectTimerFired), (.rebuilding, .systemDidWake): .ignore
+
+        // ── Pending Restore ─────────────────────────────────────────
+
+        case (.pendingRestore, .networkOnline): .retryPendingRestore
+        case (.pendingRestore, .networkOffline), (.pendingRestore, .sdkState),
+             (.pendingRestore, .systemWillSleep), (.pendingRestore, .systemDidWake),
+             (.pendingRestore, .reconnectTimerFired): .ignore
+
+        // ── Idle (event loop should not be running) ──────────────────
+
+        case (.idle, _): .ignore
+
+        // Every pair above is listed, but the compiler cannot prove it
+        // across nested enum payloads in a tuple; and the SDK's state enum
+        // may grow a case this build has never heard of.
+        default: .ignore
+        }
+    }
+
+    /// Executes the ``Action`` the table chooses for `input`.
+    private func processInput(_ input: ConnectivityInput) async {
+        switch Self.action(for: input, in: phase) {
+        case .ignore:
+            break
+
+        case .tearDownForOffline:
+            await tearDownSyncForOffline()
+
+        case .tearDownForOfflineAndReconnect:
+            activityLog.log(
+                category: .sync, severity: .warning, source: "SyncManager",
+                summary: "SDK reported \(input) — transitioning to offline + backoff retry"
+            )
+            await tearDownSyncForOffline()
+            scheduleReconnect()
+
+        case .tearDownForSleep:
+            await tearDownSyncForSleep()
+
+        case .publishRunning:
             syncState = .running
             activityLog.log(
                 category: .sync, severity: .info, source: "SyncManager",
-                summary: "Sync state: running (rebuild complete)"
+                summary: phase == .rebuilding ? "Sync state: running (rebuild complete)" : "Sync state: running"
             )
 
-        case (.rebuilding, .sdkState(.error)),
-             (.rebuilding, .sdkState(.offline)):
-            // Suppress during rebuild — the rebuild's error handling
-            // path will deal with this via waitForFirstSync().
+        case .publishTerminated(let backToActive):
+            activityLog.log(
+                category: .sync, severity: .error, source: "SyncManager",
+                summary: backToActive ? "Sync service terminated during rebuild" : "Sync service terminated"
+            )
+            syncState = .error("The sync service was terminated.")
+            if backToActive {
+                transitionPhase(to: .active) // Terminal — no recovery
+            }
+
+        case .goOffline:
+            transitionPhase(to: .offline)
+            syncState = .offline
+
+        case .rebuildAfterWake:
+            await rebuildAfterWake()
+
+        case .rebuildAfterOnline:
+            await rebuildAfterOnline()
+
+        case .suppressDuringRebuild:
             activityLog.log(
                 category: .sync, severity: .debug, source: "SyncManager",
                 summary: "SDK state suppressed during rebuild",
                 detail: "Input: \(input), phase: \(phase)"
             )
 
-        case (.rebuilding, .sdkState(.terminated)):
-            activityLog.log(
-                category: .sync, severity: .error, source: "SyncManager",
-                summary: "Sync service terminated during rebuild"
-            )
-            syncState = .error("The sync service was terminated.")
-            transitionPhase(to: .active) // Terminal — no recovery
-
-        case (.rebuilding, .networkOffline):
-            // Network went away during rebuild. Cancel the rebuild
-            // (the current buildAndStartSyncService call will fail
-            // or waitForFirstSync will time out) and go offline.
-            // Note: we set phase immediately so the rebuild's error
-            // handler knows not to schedule a reconnect.
-            await tearDownSyncForOffline()
-
-        case (.rebuilding, .systemWillSleep):
-            // Sleep arrived during rebuild. Tear down to sleeping.
-            await tearDownSyncForSleep()
-
-        case (.rebuilding, .sdkState(.idle)),
-             (.rebuilding, .networkOnline),
-             (.rebuilding, .reconnectTimerFired),
-             (.rebuilding, .systemDidWake):
-            break // Ignore during rebuild
-
-        // ── Pending Restore ─────────────────────────────────────────
-
-        case (.pendingRestore, .networkOnline):
+        case .retryPendingRestore:
             activityLog.log(
                 category: .sync, severity: .info, source: "SyncManager",
                 summary: "Retrying deferred session restore"
             )
             await onPendingOnlineRestore?()
-
-        case (.pendingRestore, .networkOffline),
-             (.pendingRestore, .sdkState),
-             (.pendingRestore, .systemWillSleep),
-             (.pendingRestore, .systemDidWake),
-             (.pendingRestore, .reconnectTimerFired):
-            break // Stay pending until network comes back
-
-        // ── Idle (event loop should not be running) ──────────────────
-
-        case (.idle, _):
-            break
-
-        // ── Catch-all for unknown SDK states ────────────────────────
-        // SyncServiceState is a non-frozen SDK enum; future versions
-        // may add new cases. Log and ignore.
-        default:
-            activityLog.log(
-                category: .sync, severity: .debug, source: "SyncManager",
-                summary: "Unhandled input ignored",
-                detail: "Input: \(input), phase: \(phase)"
-            )
         }
     }
 
@@ -731,7 +713,7 @@ final class SyncManager {
     private func scheduleReconnect() {
         reconnectTask?.cancel()
         let attempt = min(reconnectAttempt, maxBackoffExponent)
-        let upperBound = max(1, 1 << attempt) // at attempt=0 → 1 slot
+        let upperBound = Self.reconnectWindow(attempt: reconnectAttempt, maxExponent: maxBackoffExponent)
         let slots = Int.random(in: 0..<upperBound)
         let delay = Double(slots) * baseSlotSeconds
         reconnectAttempt += 1
@@ -745,6 +727,13 @@ final class SyncManager {
             guard let self, !Task.isCancelled else { return }
             self.inputContinuation?.yield(.reconnectTimerFired)
         }
+    }
+
+    /// How many one-second slots the next reconnect may wait: binary
+    /// exponential backoff, one slot on the first attempt, doubling up to
+    /// `2^maxExponent` and no further.
+    nonisolated static func reconnectWindow(attempt: Int, maxExponent: Int) -> Int {
+        max(1, 1 << min(max(attempt, 0), maxExponent))
     }
 
     /// Transitions ``phase`` and logs the change for diagnostics.
