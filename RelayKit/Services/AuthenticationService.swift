@@ -334,6 +334,9 @@ final class AuthenticationService {
             .slidingSyncVersionBuilder(.discoverNative)
             .autoEnableCrossSigning(true)
             .autoEnableBackups(true)
+            // Threads live in a panel of their own; the SDK keeps them and
+            // their summaries current only when told to.
+            .threadsEnabled(true, subscriptions: false)
             // MSC4153: only send room keys to devices signed by their owner's
             // published identity. Element switches this on in October 2026; Plic
             // ships it on from the start, so an unverified device never receives

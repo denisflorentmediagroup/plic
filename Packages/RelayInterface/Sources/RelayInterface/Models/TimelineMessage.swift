@@ -336,6 +336,21 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
     /// relations when the user replies to a threaded message.
     public var threadRootEventID: String?
 
+    /// The replies this message has gathered as a thread root, if any.
+    public var threadSummary: ThreadSummary?
+
+    /// What a thread root shows of its thread: how many replies, and who
+    /// wrote the last one.
+    public struct ThreadSummary: Sendable, Equatable {
+        public let replyCount: Int
+        public let latestSenderName: String?
+
+        nonisolated public init(replyCount: Int, latestSenderName: String?) {
+            self.replyCount = replyCount
+            self.latestSenderName = latestSenderName
+        }
+    }
+
     /// Creates a new ``TimelineMessage`` value.
     ///
     /// - Parameters:
@@ -380,7 +395,8 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         replyDetail: ReplyDetail? = nil,
         isEdited: Bool = false,
         sendState: SendState? = nil,
-        threadRootEventID: String? = nil
+        threadRootEventID: String? = nil,
+        threadSummary: ThreadSummary? = nil
     ) {
         self.id = id
         self.eventID = eventID ?? id
@@ -402,6 +418,7 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         self.isEdited = isEdited
         self.sendState = sendState
         self.threadRootEventID = threadRootEventID
+        self.threadSummary = threadSummary
     }
 
     /// The best available display name for the sender, falling back to the Matrix user ID.

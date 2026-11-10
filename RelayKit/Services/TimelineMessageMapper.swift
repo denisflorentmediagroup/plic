@@ -252,10 +252,24 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
         isHighlighted: Bool,
         replyDetail: TimelineMessage.ReplyDetail?,
         hasUnresolvedReply: Bool,
-        threadRootEventID: String?
+        threadRootEventID: String?,
+        threadSummary: TimelineMessage.ThreadSummary?
     ) {
         guard case .msgLike(let ml) = event.content else {
-            return ([], false, nil, false, nil)
+            return ([], false, nil, false, nil, nil)
+        }
+
+        var threadSummary: TimelineMessage.ThreadSummary?
+        if let summary = ml.threadSummary, summary.numReplies() > 0 {
+            var latestSenderName: String?
+            if case .ready(_, let sender, let profile, _, _) = summary.latestEvent() {
+                if case .ready(let name, _, _) = profile, let name, !name.isEmpty {
+                    latestSenderName = name
+                } else {
+                    latestSenderName = sender
+                }
+            }
+            threadSummary = .init(replyCount: Int(summary.numReplies()), latestSenderName: latestSenderName)
         }
 
         let reactions = ml.reactions.map { reaction in
@@ -327,7 +341,7 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
             }
         }
 
-        return (reactions, isHighlighted, replyDetail, hasUnresolvedReply, ml.threadRoot)
+        return (reactions, isHighlighted, replyDetail, hasUnresolvedReply, ml.threadRoot, threadSummary)
     }
 
     // MARK: - Mapping Methods
@@ -379,7 +393,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                 replyDetail: context.replyDetail,
                 isEdited: content.isEdited,
                 sendState: Self.mapSendState(event.localSendState),
-                threadRootEventID: context.threadRootEventID
+                threadRootEventID: context.threadRootEventID,
+                threadSummary: context.threadSummary
             ))
         }
 
@@ -421,7 +436,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
             replyDetail: context.replyDetail,
             isEdited: content.isEdited,
             sendState: Self.mapSendState(event.localSendState),
-            threadRootEventID: context.threadRootEventID
+            threadRootEventID: context.threadRootEventID,
+            threadSummary: context.threadSummary
         )
         return SingleItemResult(message: message, hasUnresolvedReply: context.hasUnresolvedReply)
     }

@@ -17,6 +17,7 @@ import RelayInterface
 /// Ordered contextual-menu sections for a timeline bubble (SwiftUI + NSTextView).
 enum TimelineMessageContextMenuEntry: Equatable {
     case reply
+    case replyInThread
     case copyMessage
     case saveMedia
     case addReaction
@@ -37,7 +38,8 @@ enum TimelineMessageContextMenu {
     ///     (e.g. in previews), actions default to standard user capabilities.
     static func entries(
         for message: TimelineMessage,
-        permissions: RoomPermissions? = nil
+        permissions: RoomPermissions? = nil,
+        inThread: Bool = false
     ) -> [TimelineMessageContextMenuEntry] {
         let canSend = permissions?.canSendMessages ?? true
 
@@ -47,6 +49,11 @@ enum TimelineMessageContextMenu {
         }
         if canSend {
             result.insert(.reply, at: 0)
+            // A thread grows from a sent message; a reply in one is already
+            // in its thread, and a local echo has no ID to root one on.
+            if inThread == false, message.eventID.hasPrefix("$") {
+                result.insert(.replyInThread, at: 1)
+            }
             result.append(.addReaction)
         }
         if (permissions?.canPin ?? false) && message.eventID.hasPrefix("$") {
@@ -75,6 +82,7 @@ enum TimelineMessageContextMenu {
 /// Actions that timeline rows request via ``TimelineRowView/onContextAction``.
 enum TimelineRowContextAction {
     case reply(TimelineMessage)
+    case replyInThread(TimelineMessage)
     case copy(String)
     case saveMedia(TimelineMessage)
     case togglePin(String)

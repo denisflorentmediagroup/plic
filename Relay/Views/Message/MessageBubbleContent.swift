@@ -79,6 +79,7 @@ struct MessageBubbleContent: View {
                     onMessageContextAction: { actions.contextAction($0) },
                     onPresentReactionPicker: onPresentReactionPicker,
                     permissions: actions.permissions,
+                    inThread: actions.inThread,
                     highlightedUserId: message.highlightedMentionUserId,
                     highlightKeywords: message.highlightKeywords
                 )
@@ -212,6 +213,7 @@ struct MessageBubbleContent: View {
                 onMessageContextAction: { actions.contextAction($0) },
                 onPresentReactionPicker: onPresentReactionPicker,
                 permissions: actions.permissions,
+                inThread: actions.inThread,
                 highlightedUserId: message.highlightedMentionUserId,
                 highlightKeywords: message.highlightKeywords
             )

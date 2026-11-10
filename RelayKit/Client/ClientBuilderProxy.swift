@@ -183,6 +183,19 @@ public final class ClientBuilderProxy: @unchecked Sendable {
         return self
     }
 
+    /// Turns on the SDK's thread support: thread timelines that follow sync,
+    /// and thread summaries that update on the root. Without it a thread
+    /// showed what it held when opened and nothing after.
+    ///
+    /// - Parameter subscriptions: Whether to also use MSC4306 thread
+    ///   subscriptions, which servers may not support yet.
+    /// - Returns: This builder for chaining.
+    @discardableResult
+    public func threadsEnabled(_ enabled: Bool, subscriptions: Bool) -> ClientBuilderProxy {
+        builder = builder.threadsEnabled(enabled: enabled, threadSubscriptions: subscriptions)
+        return self
+    }
+
     /// Uses an encrypted SQLite store at the given paths.
     ///
     /// Supersedes ``sessionPaths(dataPath:cachePath:)`` — the store builder

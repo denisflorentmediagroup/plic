@@ -196,7 +196,7 @@ struct TimelineRowView: View, Equatable {
 
     @ViewBuilder
     private var contextMenu: some View {
-        ForEach(TimelineMessageContextMenu.entries(for: message, permissions: actions.permissions).enumerated(), id: \.offset) { _, entry in
+        ForEach(TimelineMessageContextMenu.entries(for: message, permissions: actions.permissions, inThread: actions.inThread).enumerated(), id: \.offset) { _, entry in
             contextMenuEntry(entry)
         }
     }
@@ -209,6 +209,12 @@ struct TimelineRowView: View, Equatable {
                 actions.contextAction(.reply(message))
             } label: {
                 Label("Reply", systemImage: "arrowshape.turn.up.left")
+            }
+        case .replyInThread:
+            Button {
+                actions.contextAction(.replyInThread(message))
+            } label: {
+                Label("Reply in Thread", systemImage: "bubble.left.and.text.bubble.right")
             }
         case .copyMessage:
             Button {

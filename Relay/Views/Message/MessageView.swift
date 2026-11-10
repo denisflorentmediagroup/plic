@@ -115,6 +115,12 @@ struct MessageView: View {
                     }
 
                     messageBubble
+
+                    if let summary = message.threadSummary, !actions.inThread {
+                        ThreadSummaryButton(summary: summary, isOutgoing: message.isOutgoing) {
+                            actions.openThread(message.eventID)
+                        }
+                    }
                 }
                 .frame(maxWidth: 500, alignment: message.isOutgoing ? .trailing : .leading)
             }

@@ -41,6 +41,8 @@ final class MessageTextContent: NSTextView {
 
     /// The current user's room-level permissions for gating context menu actions.
     var permissions: RoomPermissions?
+    /// Whether the message sits in a thread panel.
+    var inThread = false
 
     // MARK: - Link Click Interception
 
@@ -196,13 +198,20 @@ final class MessageTextContent: NSTextView {
             return baseMenu
         }
 
-        let entries = TimelineMessageContextMenu.entries(for: message, permissions: permissions)
+        let entries = TimelineMessageContextMenu.entries(for: message, permissions: permissions, inThread: inThread)
         var insertIndex = 0
         for entry in entries {
             switch entry {
             case .reply:
                 baseMenu.insertItem(
                     menuItem(title: "Reply", symbol: "arrowshape.turn.up.left", action: #selector(contextReply)),
+                    at: insertIndex
+                )
+                insertIndex += 1
+            case .replyInThread:
+                baseMenu.insertItem(
+                    menuItem(title: "Reply in Thread", symbol: "bubble.left.and.text.bubble.right",
+                             action: #selector(contextReplyInThread)),
                     at: insertIndex
                 )
                 insertIndex += 1
@@ -285,6 +294,11 @@ final class MessageTextContent: NSTextView {
     @objc private func contextReply() {
         guard let message = contextMessage else { return }
         onMessageContextAction?(.reply(message))
+    }
+
+    @objc private func contextReplyInThread() {
+        guard let message = contextMessage else { return }
+        onMessageContextAction?(.replyInThread(message))
     }
 
     @objc private func contextCopyMessage() {

@@ -163,7 +163,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
 
         isLoading = true
         do {
-            try await setupTimeline(focus: .live(hideThreadedEvents: false))
+            try await setupTimeline(focus: .live(hideThreadedEvents: true))
             timelineFocus = .live
             hasReachedEnd = true
             observeTypingNotifications()
@@ -278,7 +278,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             try await setupTimeline(focus: .event(
                 eventId: eventId,
                 numContextEvents: 50,
-                threadMode: .automatic(hideThreadedEvents: false)
+                threadMode: .automatic(hideThreadedEvents: true)
             ))
             timelineFocus = .focusedOnEvent(eventId)
             hasReachedEnd = false
@@ -294,7 +294,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             errorReporter.report(.messageLoadFailed(error.localizedDescription))
             // Attempt to recover by returning to live
             do {
-                try await setupTimeline(focus: .live(hideThreadedEvents: false))
+                try await setupTimeline(focus: .live(hideThreadedEvents: true))
                 timelineFocus = .live
             } catch {
                 activityLog?.log(
@@ -319,7 +319,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         teardownTimeline()
 
         do {
-            try await setupTimeline(focus: .live(hideThreadedEvents: false))
+            try await setupTimeline(focus: .live(hideThreadedEvents: true))
             timelineFocus = .live
         } catch is CancellationError {
             isLoading = false
@@ -789,7 +789,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         isSuspended = false
 
         do {
-            try await setupTimeline(focus: .live(hideThreadedEvents: false))
+            try await setupTimeline(focus: .live(hideThreadedEvents: true))
             timelineFocus = .live
             hasReachedEnd = true
             observeTypingNotifications()

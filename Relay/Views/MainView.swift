@@ -62,6 +62,8 @@ struct MainView: View { // swiftlint:disable:this type_body_length
     @State private var searchModel: SearchViewModel = SearchViewModel()
     @State private var messageSearchService: (any MessageSearchServiceProtocol)?
     @State private var showingInspector = false
+    /// The root of the thread open in the inspector column, if one is.
+    @State private var openThreadRootId: String?
     @State private var showingPinnedMessages = false
     @State private var focusedMessageId: String?
     @State private var incomingVerificationItem: VerificationItem?
@@ -211,6 +213,8 @@ struct MainView: View { // swiftlint:disable:this type_body_length
         }
         .onChange(of: selectedRoomId) { oldRoomId, newRoomId in
             persistedRoomId = newRoomId
+            // A thread belongs to its room.
+            openThreadRootId = nil
             if let oldRoomId {
                 matrixService.suspendTimeline(roomId: oldRoomId)
             }
@@ -380,13 +384,25 @@ struct MainView: View { // swiftlint:disable:this type_body_length
                 viewModel: viewModel,
                 focusedMessageId: $focusedMessageId,
                 onUserTap: { profile in showUserProfile(profile) },
-                onRoomTap: { identifier in handleRoomTap(identifier) }
+                onRoomTap: { identifier in handleRoomTap(identifier) },
+                onOpenThread: { rootEventId in
+                    openThreadRootId = rootEventId
+                    showingInspector = true
+                }
             )
             .id(selectedRoomId)
             .inspector(isPresented: $showingInspector) {
-                inspectorPanel(roomId: selectedRoomId)
-                    .id(selectedRoomId)
-                    .inspectorColumnWidth(min: 240, ideal: 260, max: 320)
+                if let openThreadRootId {
+                    ThreadPanel(roomId: selectedRoomId, rootEventId: openThreadRootId) {
+                        self.openThreadRootId = nil
+                        showingInspector = false
+                    }
+                    .inspectorColumnWidth(min: 320, ideal: 420, max: 600)
+                } else {
+                    inspectorPanel(roomId: selectedRoomId)
+                        .id(selectedRoomId)
+                        .inspectorColumnWidth(min: 240, ideal: 260, max: 320)
+                }
             }
         } else if let selectedSpaceId,
                   let spaceSummary = matrixService.spaces.first(where: { $0.id == selectedSpaceId }) {

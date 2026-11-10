@@ -44,6 +44,8 @@ struct MessageTextView: NSViewRepresentable {
 
     /// The current user's room-level permissions for gating context menu actions.
     var permissions: RoomPermissions?
+    /// Whether the message sits in a thread panel, where "Reply in Thread" has no place.
+    var inThread = false
 
     /// When set, the mention pill matching this user ID is rendered with a
     /// prominent highlight style to indicate the message mentions the user.
@@ -145,6 +147,7 @@ struct MessageTextView: NSViewRepresentable {
         view.onMessageContextAction = onMessageContextAction
         view.onPresentReactionPicker = onPresentReactionPicker
         view.permissions = permissions
+        view.inThread = inThread
 
         // Populate text immediately so sizeThatFits (which SwiftUI may
         // call before updateNSView) has content to measure. Without this,
@@ -175,6 +178,7 @@ struct MessageTextView: NSViewRepresentable {
         view.onMessageContextAction = onMessageContextAction
         view.onPresentReactionPicker = onPresentReactionPicker
         view.permissions = permissions
+        view.inThread = inThread
 
         let coordinator = context.coordinator
 

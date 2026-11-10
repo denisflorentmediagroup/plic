@@ -70,6 +70,12 @@ final class TimelineActions: Equatable {
     /// Initiates a reply to a message (e.g. swipe-to-reply).
     var reply: (TimelineMessage) -> Void = { _ in }
 
+    /// Opens the thread rooted at a message. Parameter: the root's event ID.
+    var openThread: (String) -> Void = { _ in }
+
+    /// Whether these rows show a thread, where no further threading is offered.
+    var inThread = false
+
     /// Opens the user profile for the sender of a message (e.g. avatar double-tap).
     var avatarDoubleTap: (TimelineMessage) -> Void = { _ in }
 

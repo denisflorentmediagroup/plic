@@ -57,6 +57,14 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     /// read receipts, and drag-and-drop are all disabled.
     var readOnly: Bool = false
 
+    /// When set, this timeline shows the thread rooted at that event, not
+    /// the room: it loads differently, keeps its own draft, and offers no
+    /// further threading.
+    var threadRootEventId: String?
+
+    /// Opens a thread in the thread panel. Parameter: the root's event ID.
+    var onOpenThread: ((String) -> Void)?
+
     /// The compose view model for this room, retrieved from the draft store
     /// so unsent drafts survive room switches. Initialized as a temporary
     /// placeholder; the actual draft is loaded from the store in `.task`.
@@ -96,7 +104,9 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
         focusedMessageId: Binding<String?>,
         onUserTap: ((UserProfile) -> Void)? = nil,
         onRoomTap: ((String) -> Void)? = nil,
-        readOnly: Bool = false
+        readOnly: Bool = false,
+        threadRootEventId: String? = nil,
+        onOpenThread: ((String) -> Void)? = nil
     ) {
         self.roomId = roomId
         self.roomName = roomName
@@ -106,6 +116,8 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
         self.onUserTap = onUserTap
         self.onRoomTap = onRoomTap
         self.readOnly = readOnly
+        self.threadRootEventId = threadRootEventId
+        self.onOpenThread = onOpenThread
 
         // Seed the row cache from the view model's cached messages so
         // the first body evaluation already has content to render.
@@ -158,6 +170,11 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                 top: height, left: 0, bottom: composeBarHeight + 4, right: 0
             ))
         }
+    }
+
+    /// Drafts are kept per room; a thread keeps its own beside the room's.
+    private var draftKey: String {
+        threadRootEventId.map { "\(roomId)#thread:\($0)" } ?? roomId
     }
 
     private var showStateEvents: Bool {
@@ -329,8 +346,10 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             // text, reply/edit context, and staged attachments survive room
             // switches.
             if !readOnly {
-                compose = composeDraftStore.draft(for: roomId)
-                await compose.restoreDraftIfNeeded(roomId: roomId, matrixService: matrixService)
+                compose = composeDraftStore.draft(for: draftKey)
+                if threadRootEventId == nil {
+                    await compose.restoreDraftIfNeeded(roomId: roomId, matrixService: matrixService)
+                }
             }
 
             // Bind the timeline action callbacks once. The closures capture
@@ -351,6 +370,11 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             // previously visited room render in the first frame, before
             // the async loadTimeline call reconnects to the SDK.
             rebuildCachedRows()
+
+            if let threadRootEventId {
+                await viewModel.loadThreadTimeline(rootEventId: threadRootEventId)
+                return
+            }
 
             // Always load the live timeline first — it is reliable and fast.
             await viewModel.loadTimeline()
@@ -412,7 +436,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             if !readOnly, sendTypingNotifications {
                 Task { await matrixService.sendTypingNotice(roomId: roomId, isTyping: false) }
             }
-            if !readOnly {
+            if !readOnly, threadRootEventId == nil {
                 compose.persistDraft(roomId: roomId, matrixService: matrixService)
             }
             memberRefreshTask?.cancel()
@@ -627,6 +651,10 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             self.onUserTap?(profile)
         }
         actions.roomTap = onRoomTap
+        actions.openThread = { rootEventId in
+            onOpenThread?(rootEventId)
+        }
+        actions.inThread = threadRootEventId != nil
         actions.contextAction = { action in
             self.handleContextAction(action)
         }
@@ -901,6 +929,8 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
                 compose.replyingTo = message
             }
+        case .replyInThread(let message):
+            onOpenThread?(message.eventID)
         case .copy(let text):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
