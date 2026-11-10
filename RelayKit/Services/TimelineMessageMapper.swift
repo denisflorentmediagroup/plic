@@ -162,9 +162,25 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                     body = content.description ?? content.body
                     kind = .location
                     location = .init(geoURI: content.geoUri, description: content.description)
-                case .gallery:
-                    body = "Gallery"
-                    kind = .image
+                case .gallery(let gallery):
+                    // The first image stands for the set; the body says how many.
+                    let count = gallery.itemtypes.count
+                    body = gallery.body.isEmpty ? (count == 1 ? "1 item" : "\(count) items") : gallery.body
+                    if case .image(let first)? = gallery.itemtypes.first {
+                        kind = .image
+                        mediaInfo = .init(
+                            mxcURL: first.source.url(),
+                            mediaSourceJSON: first.source.toJson(),
+                            filename: first.filename,
+                            mimetype: first.info?.mimetype,
+                            width: first.info?.width,
+                            height: first.info?.height,
+                            size: first.info?.size,
+                            caption: count > 1 ? "\(count) items" : first.caption
+                        )
+                    } else {
+                        kind = .file
+                    }
                 case .other:
                     body = "Message"
                     kind = .other
