@@ -830,6 +830,9 @@ private struct SheetModifiers: ViewModifier {
             .sheet(item: $incomingVerificationItem) { item in
                 VerificationSheet(viewModel: item.viewModel)
             }
+            .sheet(isPresented: Bindable(appActions).showNewMessage) {
+                NewMessageSheet(selectedRoomId: $selectedRoomId)
+            }
             .sheet(isPresented: Bindable(appActions).showCreateRoom) {
                 CreateEntitySheet(kind: .room, selectedRoomId: $selectedRoomId)
             }

@@ -870,6 +870,17 @@ public final class MatrixService: MatrixServiceProtocol {
             return existingRoom.id()
         }
 
+        // m.direct may lack a room that is a direct chat in every other way:
+        // made by a client that never wrote the account data. A joined
+        // two-person room flagged direct, with this user in it, is the
+        // conversation; opening a second one beside it helps no one.
+        for summary in rooms where summary.isDirect && summary.membership == .joined {
+            guard let candidate = room(id: summary.id), candidate.joinedMembersCount() == 2,
+                  let member = try? await candidate.member(userId: userId),
+                  member.membership == .join else { continue }
+            return summary.id
+        }
+
         // Create a new DM room
         let params = CreateRoomParameters(
             name: nil,
@@ -1085,6 +1096,14 @@ public final class MatrixService: MatrixServiceProtocol {
     public func sendTypingNotice(roomId: String, isTyping: Bool) async {
         guard let room = room(id: roomId) else { return }
         try? await room.typingNotice(isTyping: isTyping)
+    }
+
+    public func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult] {
+        let client = try requireClient()
+        let results = try await client.searchUsers(searchTerm: term, limit: UInt64(max(1, limit)))
+        return results.results.map {
+            UserSearchResult(userId: $0.userId, displayName: $0.displayName, avatarURL: $0.avatarUrl)
+        }
     }
 
     public func saveDraft(roomId: String, text: String) async {

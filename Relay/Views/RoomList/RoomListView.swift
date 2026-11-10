@@ -167,6 +167,9 @@ struct RoomListView: View {
 
     private var roomDirectoryButton: some View {
         Menu {
+            Button("New Message\u{2026}") {
+                appActions.showNewMessage = true
+            }
             Button("Create Room\u{2026}") {
                 appActions.showCreateRoom = true
             }

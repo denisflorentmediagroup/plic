@@ -386,6 +386,10 @@ public protocol MatrixServiceProtocol: AnyObject, Observable {
     /// The same for group rooms.
     var defaultGroupNotificationMode: DefaultNotificationMode { get }
 
+    /// Searches the homeserver's user directory. The term goes to the
+    /// server; results are whoever it chooses to show.
+    func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult]
+
     /// Keeps an unsent message for a room across launches, in the SDK's
     /// encrypted store. An empty text clears it.
     func saveDraft(roomId: String, text: String) async
@@ -892,6 +896,7 @@ public extension MatrixServiceProtocol {
     }
 
     // Defaults for mocks and previews, which have no account behind them.
+    func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult] { [] }
     var defaultDirectNotificationMode: DefaultNotificationMode { .allMessages }
     var defaultGroupNotificationMode: DefaultNotificationMode { .mentionsAndKeywordsOnly }
     func saveDraft(roomId: String, text: String) async {}

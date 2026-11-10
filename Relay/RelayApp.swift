@@ -411,6 +411,7 @@ struct RelayApp: App {
 /// observes these flags and presents the corresponding UI.
 @Observable
 final class AppActions {
+    var showNewMessage = false
     var showCreateRoom = false
     var showCreateSpace = false
     var showJoinRoom = false
@@ -436,10 +437,17 @@ struct FileMenuCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
+            // ⌘N is New Message, as in Messages and Mail; rooms and spaces
+            // take the modifier keys.
+            Button("New Message…") {
+                appActions.showNewMessage = true
+            }
+            .keyboardShortcut("n", modifiers: .command)
+
             Button("Create Room…") {
                 appActions.showCreateRoom = true
             }
-            .keyboardShortcut("n", modifiers: .command)
+            .keyboardShortcut("n", modifiers: [.command, .option])
 
             Button("Create Space…") {
                 appActions.showCreateSpace = true
