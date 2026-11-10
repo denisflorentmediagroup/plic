@@ -158,6 +158,9 @@ struct RelayApp: App {
                         // room is the previous account's.
                         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
                         selectedRoomId = nil
+                        // Per-room settings are keyed by room ID, and those
+                        // IDs are the previous account's too.
+                        RoomBehaviorStore.shared.removeAll()
                     }
                 }
                 .onChange(of: notificationPreview, initial: true) {

@@ -74,6 +74,13 @@ final class RoomBehaviorStore {
         save()
     }
 
+    /// Forgets every room's overrides. Called at sign-out: the room IDs
+    /// they are keyed by belong to the account that is leaving.
+    func removeAll() {
+        cache = [:]
+        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+    }
+
     // MARK: - Persistence
 
     private func load() {
