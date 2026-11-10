@@ -330,6 +330,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             // switches.
             if !readOnly {
                 compose = composeDraftStore.draft(for: roomId)
+                await compose.restoreDraftIfNeeded(roomId: roomId, matrixService: matrixService)
             }
 
             // Bind the timeline action callbacks once. The closures capture

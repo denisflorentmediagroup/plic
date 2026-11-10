@@ -228,6 +228,7 @@ final class ComposeViewModel {
                 )
             }
             matrixService.donateOutgoingInteraction(roomId: roomId)
+            await matrixService.saveDraft(roomId: roomId, text: "")
         }
     }
 
@@ -450,6 +451,30 @@ final class ComposeViewModel {
             }
         }
         return escaped
+    }
+
+    // MARK: - Persisted drafts
+
+    /// Whether the persisted draft has been consulted for this room.
+    private var didRestoreDraft = false
+
+    /// Fills an empty compose field from the draft the SDK keeps for the room.
+    ///
+    /// Text only: a reply's context and staged files live for the session.
+    /// The SDK's store is encrypted like the messages, so an unsent sentence
+    /// is kept no less carefully than a sent one.
+    func restoreDraftIfNeeded(roomId: String, matrixService: any MatrixServiceProtocol) async {
+        guard !didRestoreDraft else { return }
+        didRestoreDraft = true
+        guard text.isEmpty, attachments.isEmpty,
+              let draft = await matrixService.loadDraft(roomId: roomId), !draft.isEmpty else { return }
+        text = draft
+    }
+
+    /// Writes the current text to the SDK's draft for the room, or clears it.
+    func persistDraft(roomId: String, matrixService: any MatrixServiceProtocol) {
+        let draft = editingMessage == nil ? text : ""
+        Task { await matrixService.saveDraft(roomId: roomId, text: draft) }
     }
 
     /// Drops a staged attachment, and the temporary copy made for it.
