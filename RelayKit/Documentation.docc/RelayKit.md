@@ -55,16 +55,11 @@ await syncService.start()
 - ``ClientProxyProtocol``
 
 ### Sync
-- ``SyncServiceProxy``
 - ``SyncServiceBuilderProxy``
 - ``RoomListServiceProxy``
 - ``RoomListProxy``
 
 ### Rooms
-- ``JoinedRoomProxy``
-- ``InvitedRoomProxy``
-- ``KnockedRoomProxy``
-- ``BannedRoomProxy``
 
 ### Timeline
 - ``TimelineProxy``
@@ -75,7 +70,6 @@ await syncService.start()
 - ``RoomSummaryProvider``
 
 ### Encryption
-- ``EncryptionProxy``
 - ``UserIdentityProxy``
 
 ### Verification
@@ -84,7 +78,6 @@ await syncService.start()
 
 ### Notifications
 - ``NotificationClientProxy``
-- ``NotificationSettingsProxy``
 
 ### Other Services
 - ``SpaceServiceProxy``
