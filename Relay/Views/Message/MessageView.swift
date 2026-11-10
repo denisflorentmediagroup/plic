@@ -121,6 +121,10 @@ struct MessageView: View {
                             actions.openThread(message.eventID)
                         }
                     }
+
+                    if message.isOutgoing, !message.readByUserIds.isEmpty {
+                        SeenByLabel(userIds: message.readByUserIds)
+                    }
                 }
                 .frame(maxWidth: 500, alignment: message.isOutgoing ? .trailing : .leading)
             }

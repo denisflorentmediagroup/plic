@@ -140,6 +140,10 @@ private struct ReactionBadge: View {
                 }
             }
         }
+        // Who reacted, on hover: the IDs' local parts, as the SDK gives no names here.
+        .help(reaction.senderIDs.map { id in
+            String(id.dropFirst().split(separator: ":").first ?? Substring(id))
+        }.joined(separator: ", "))
         .buttonStyle(.plain)
     }
 }

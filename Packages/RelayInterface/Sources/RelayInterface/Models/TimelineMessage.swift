@@ -345,6 +345,10 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
     /// A poll, for a message of kind ``Kind/poll``.
     public var poll: Poll?
 
+    /// Members whose read marker rests on this message, other than the
+    /// user. A receipt moves forward, so these name who has read this far.
+    public var readByUserIds: [String]
+
     /// A shared place. Plic shows it as text and an Open in Maps button:
     /// drawing a map would send the coordinates to a tile server unasked.
     public struct Location: Sendable, Equatable {
@@ -471,7 +475,8 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         threadRootEventID: String? = nil,
         threadSummary: ThreadSummary? = nil,
         location: Location? = nil,
-        poll: Poll? = nil
+        poll: Poll? = nil,
+        readByUserIds: [String] = []
     ) {
         self.id = id
         self.eventID = eventID ?? id
@@ -496,6 +501,7 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         self.threadSummary = threadSummary
         self.location = location
         self.poll = poll
+        self.readByUserIds = readByUserIds
     }
 
     /// The best available display name for the sender, falling back to the Matrix user ID.

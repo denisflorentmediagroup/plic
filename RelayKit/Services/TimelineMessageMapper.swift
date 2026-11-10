@@ -366,6 +366,11 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
         return (reactions, isHighlighted, replyDetail, hasUnresolvedReply, ml.threadRoot, threadSummary)
     }
 
+    /// Who has read up to this event, the user excepted, in a stable order.
+    nonisolated private func readers(of event: EventTimelineItem) -> [String] {
+        event.readReceipts.keys.filter { $0 != currentUserId }.sorted()
+    }
+
     // MARK: - Mapping Methods
 
     /// Maps an array of raw SDK timeline items into ``TimelineMessage`` models.
@@ -418,7 +423,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                 threadRootEventID: context.threadRootEventID,
                 threadSummary: context.threadSummary,
                 location: content.location,
-                poll: content.poll
+                poll: content.poll,
+                readByUserIds: readers(of: event)
             ))
         }
 
@@ -463,7 +469,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
             threadRootEventID: context.threadRootEventID,
             threadSummary: context.threadSummary,
             location: content.location,
-            poll: content.poll
+            poll: content.poll,
+            readByUserIds: readers(of: event)
         )
         return SingleItemResult(message: message, hasUnresolvedReply: context.hasUnresolvedReply)
     }
