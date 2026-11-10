@@ -1207,6 +1207,26 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         return false
     }
 
+    // MARK: - Polls
+
+    func respondToPoll(pollStartEventId: String, answerIds: [String]) async {
+        guard let sdkTimeline else { return }
+        do {
+            try await sdkTimeline.sendPollResponse(pollStartEventId: pollStartEventId, answers: answerIds)
+        } catch {
+            errorReporter.report(.messageSendFailed(error.localizedDescription))
+        }
+    }
+
+    func endPoll(pollStartEventId: String) async {
+        guard let sdkTimeline else { return }
+        do {
+            try await sdkTimeline.endPoll(pollStartEventId: pollStartEventId, text: "The poll has ended.")
+        } catch {
+            errorReporter.report(.messageSendFailed(error.localizedDescription))
+        }
+    }
+
     // MARK: - Identity changes
 
     /// Watches for members whose encryption identity changes.

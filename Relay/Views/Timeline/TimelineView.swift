@@ -655,6 +655,12 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             onOpenThread?(rootEventId)
         }
         actions.inThread = threadRootEventId != nil
+        actions.respondToPoll = { pollId, answerIds in
+            Task { await viewModel.respondToPoll(pollStartEventId: pollId, answerIds: answerIds) }
+        }
+        actions.endPoll = { pollId in
+            Task { await viewModel.endPoll(pollStartEventId: pollId) }
+        }
         actions.contextAction = { action in
             self.handleContextAction(action)
         }

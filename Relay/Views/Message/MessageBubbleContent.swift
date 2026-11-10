@@ -42,8 +42,12 @@ struct MessageBubbleContent: View {
 
     @ViewBuilder
     private var content: some View {
-        if message.kind == .image, message.mediaInfo != nil {
+        if message.kind == .image || message.kind == .sticker, message.mediaInfo != nil {
             imageContent
+        } else if message.kind == .poll, let poll = message.poll {
+            PollMessageView(message: message, poll: poll)
+        } else if message.kind == .location, let location = message.location {
+            LocationMessageView(message: message, location: location)
         } else if message.kind == .video, message.mediaInfo != nil {
             videoContent
         } else if message.kind == .audio, message.mediaInfo != nil {

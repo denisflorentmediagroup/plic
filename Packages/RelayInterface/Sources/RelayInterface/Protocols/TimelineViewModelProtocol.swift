@@ -194,9 +194,17 @@ public protocol TimelineViewModelProtocol: AnyObject, Observable {
 
     /// Accepts a member's new identity, as what this account now trusts.
     func acknowledgeIdentityChange(userId: String) async
+
+    /// Casts, or changes, the user's vote in a poll.
+    func respondToPoll(pollStartEventId: String, answerIds: [String]) async
+
+    /// Ends a poll the user started.
+    func endPoll(pollStartEventId: String) async
 }
 
 public extension TimelineViewModelProtocol {
     var identityChanges: [IdentityChange] { [] }
     func acknowledgeIdentityChange(userId: String) async {}
+    func respondToPoll(pollStartEventId: String, answerIds: [String]) async {}
+    func endPoll(pollStartEventId: String) async {}
 }

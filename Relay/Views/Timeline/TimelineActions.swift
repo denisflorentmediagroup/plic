@@ -76,6 +76,12 @@ final class TimelineActions: Equatable {
     /// Whether these rows show a thread, where no further threading is offered.
     var inThread = false
 
+    /// Casts or changes a vote. Parameters: (poll start event ID, answer IDs).
+    var respondToPoll: (String, [String]) -> Void = { _, _ in }
+
+    /// Ends a poll the user started. Parameter: the poll start event ID.
+    var endPoll: (String) -> Void = { _ in }
+
     /// Opens the user profile for the sender of a message (e.g. avatar double-tap).
     var avatarDoubleTap: (TimelineMessage) -> Void = { _ in }
 

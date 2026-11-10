@@ -60,6 +60,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
         var mediaInfo: TimelineMessage.MediaInfo?
         var formattedBody: String?
         var isEdited: Bool
+        var location: TimelineMessage.Location?
+        var poll: TimelineMessage.Poll?
     }
 
     // swiftlint:disable function_body_length cyclomatic_complexity
@@ -74,6 +76,8 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
         var mediaInfo: TimelineMessage.MediaInfo?
         var formattedBody: String?
         var isEdited = false
+        var location: TimelineMessage.Location?
+        var poll: TimelineMessage.Poll?
 
         switch event.content {
         case .msgLike(let msgLikeContent):
@@ -154,9 +158,10 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                         size: fileContent.info?.size,
                         caption: fileContent.caption
                     )
-                case .location:
-                    body = "Location"
+                case .location(let content):
+                    body = content.description ?? content.body
                     kind = .location
+                    location = .init(geoURI: content.geoUri, description: content.description)
                 case .gallery:
                     body = "Gallery"
                     kind = .image
@@ -164,12 +169,29 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                     body = "Message"
                     kind = .other
                 }
-            case .sticker:
-                body = "Sticker"
+            case .sticker(let stickerBody, let info, let source):
+                // Drawn like an image; the body is the sticker's description.
+                body = stickerBody
                 kind = .sticker
-            case .poll:
-                body = "Poll"
+                mediaInfo = .init(
+                    mxcURL: source.url(),
+                    mediaSourceJSON: source.toJson(),
+                    filename: stickerBody,
+                    mimetype: info.mimetype,
+                    width: info.width,
+                    height: info.height,
+                    size: info.size
+                )
+            case .poll(let question, let pollKind, let maxSelections, let answers, let votes, let endTime, _):
+                body = question
                 kind = .poll
+                poll = .init(
+                    question: question,
+                    answers: answers.map { .init(id: $0.id, text: $0.text, voterIDs: votes[$0.id] ?? []) },
+                    maxSelections: Int(max(1, maxSelections)),
+                    isDisclosed: pollKind == .disclosed,
+                    endedAt: endTime.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+                )
             case .redacted:
                 body = "This message was deleted"
                 kind = .redacted
@@ -220,7 +242,7 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
 
         return ExtractedContent(
             body: body, attributedBody: attributedBody, kind: kind, mediaInfo: mediaInfo,
-            formattedBody: formattedBody, isEdited: isEdited
+            formattedBody: formattedBody, isEdited: isEdited, location: location, poll: poll
         )
     }
 
@@ -394,7 +416,9 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
                 isEdited: content.isEdited,
                 sendState: Self.mapSendState(event.localSendState),
                 threadRootEventID: context.threadRootEventID,
-                threadSummary: context.threadSummary
+                threadSummary: context.threadSummary,
+                location: content.location,
+                poll: content.poll
             ))
         }
 
@@ -437,7 +461,9 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
             isEdited: content.isEdited,
             sendState: Self.mapSendState(event.localSendState),
             threadRootEventID: context.threadRootEventID,
-            threadSummary: context.threadSummary
+            threadSummary: context.threadSummary,
+            location: content.location,
+            poll: content.poll
         )
         return SingleItemResult(message: message, hasUnresolvedReply: context.hasUnresolvedReply)
     }
@@ -552,7 +578,9 @@ struct TimelineMessageMapper: Sendable { // swiftlint:disable:this type_body_len
             kind: content.kind,
             mediaInfo: content.mediaInfo,
             isEdited: content.isEdited,
-            sendState: Self.mapSendState(event.localSendState)
+            sendState: Self.mapSendState(event.localSendState),
+            location: content.location,
+            poll: content.poll
         )
     }
 

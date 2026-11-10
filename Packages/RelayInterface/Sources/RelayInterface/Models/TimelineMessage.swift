@@ -339,6 +339,79 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
     /// The replies this message has gathered as a thread root, if any.
     public var threadSummary: ThreadSummary?
 
+    /// A shared place, for a message of kind ``Kind/location``.
+    public var location: Location?
+
+    /// A poll, for a message of kind ``Kind/poll``.
+    public var poll: Poll?
+
+    /// A shared place. Plic shows it as text and an Open in Maps button:
+    /// drawing a map would send the coordinates to a tile server unasked.
+    public struct Location: Sendable, Equatable {
+        /// The `geo:` URI as sent.
+        public let geoURI: String
+        /// What the sender called the place, if anything.
+        public let description: String?
+
+        nonisolated public init(geoURI: String, description: String?) {
+            self.geoURI = geoURI
+            self.description = description
+        }
+
+        /// Latitude and longitude parsed from the URI, when it has them.
+        nonisolated public var coordinates: (latitude: Double, longitude: Double)? {
+            guard geoURI.lowercased().hasPrefix("geo:") else { return nil }
+            let numbers = geoURI.dropFirst(4).split(separator: ";").first?
+                .split(separator: ",").compactMap { Double($0) } ?? []
+            guard numbers.count >= 2, abs(numbers[0]) <= 90, abs(numbers[1]) <= 180 else { return nil }
+            return (numbers[0], numbers[1])
+        }
+    }
+
+    /// A poll and its state, as the sender's event and the votes so far say.
+    public struct Poll: Sendable, Equatable {
+        public struct Answer: Sendable, Equatable, Identifiable {
+            public let id: String
+            public let text: String
+            /// Voters for this answer. Empty while an undisclosed poll runs.
+            public let voterIDs: [String]
+
+            nonisolated public init(id: String, text: String, voterIDs: [String]) {
+                self.id = id
+                self.text = text
+                self.voterIDs = voterIDs
+            }
+        }
+
+        public let question: String
+        public let answers: [Answer]
+        /// How many answers one voter may pick.
+        public let maxSelections: Int
+        /// Whether results are visible while the poll runs.
+        public let isDisclosed: Bool
+        /// When the poll was ended, if it was.
+        public let endedAt: Date?
+
+        nonisolated public init(question: String, answers: [Answer], maxSelections: Int, isDisclosed: Bool, endedAt: Date?) {
+            self.question = question
+            self.answers = answers
+            self.maxSelections = maxSelections
+            self.isDisclosed = isDisclosed
+            self.endedAt = endedAt
+        }
+
+        public var hasEnded: Bool { endedAt != nil }
+        /// Whether counts may be shown: a disclosed poll always, another once ended.
+        public var showsResults: Bool { isDisclosed || hasEnded }
+        public var totalVotes: Int { answers.reduce(0) { $0 + $1.voterIDs.count } }
+
+        /// The answers a user picked.
+        nonisolated public func selections(of userId: String?) -> Set<String> {
+            guard let userId else { return [] }
+            return Set(answers.filter { $0.voterIDs.contains(userId) }.map(\.id))
+        }
+    }
+
     /// What a thread root shows of its thread: how many replies, and who
     /// wrote the last one.
     public struct ThreadSummary: Sendable, Equatable {
@@ -396,7 +469,9 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         isEdited: Bool = false,
         sendState: SendState? = nil,
         threadRootEventID: String? = nil,
-        threadSummary: ThreadSummary? = nil
+        threadSummary: ThreadSummary? = nil,
+        location: Location? = nil,
+        poll: Poll? = nil
     ) {
         self.id = id
         self.eventID = eventID ?? id
@@ -419,6 +494,8 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
         self.sendState = sendState
         self.threadRootEventID = threadRootEventID
         self.threadSummary = threadSummary
+        self.location = location
+        self.poll = poll
     }
 
     /// The best available display name for the sender, falling back to the Matrix user ID.
