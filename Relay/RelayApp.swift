@@ -227,9 +227,16 @@ struct RelayApp: App {
             actions: [acceptAction],
             intentIdentifiers: []
         )
+        let replyAction = UNTextInputNotificationAction(
+            identifier: NotificationDelegate.replyActionIdentifier,
+            title: "Reply",
+            options: [],
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Message"
+        )
         let roomMessageCategory = UNNotificationCategory(
             identifier: NotificationDelegate.roomMessageCategoryIdentifier,
-            actions: [],
+            actions: [replyAction],
             intentIdentifiers: []
         )
         center.setNotificationCategories([verificationCategory, roomMessageCategory])
@@ -253,8 +260,15 @@ struct RelayApp: App {
             case .allMessages:
                 return total + room.notificationCount
             case nil:
-                // Default: DMs count all notifications, groups count highlights only
-                return room.isDirect ? total + room.notificationCount : total + room.highlightCount
+                // No rule of its own: the account's default for its kind.
+                let fallback = room.isDirect
+                    ? matrixService.defaultDirectNotificationMode
+                    : matrixService.defaultGroupNotificationMode
+                switch fallback {
+                case .mute: return total
+                case .mentionsAndKeywordsOnly: return total + room.highlightCount
+                case .allMessages: return total + room.notificationCount
+                }
             }
         }
     }
@@ -547,6 +561,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     nonisolated static let verificationCategoryIdentifier = "VERIFICATION_REQUEST"
     nonisolated static let acceptActionIdentifier = "ACCEPT_VERIFICATION"
     nonisolated static let roomMessageCategoryIdentifier = "ROOM_MESSAGE"
+    nonisolated static let replyActionIdentifier = "REPLY_TO_ROOM"
 
     weak var matrixService: MatrixService?
     weak var appActions: AppActions?
@@ -581,6 +596,18 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
         if content.categoryIdentifier == Self.roomMessageCategoryIdentifier {
             let roomId = content.userInfo["roomId"] as? String
+
+            // Typed into the banner: sent without bringing the window up.
+            if let reply = response as? UNTextInputNotificationResponse,
+               response.actionIdentifier == Self.replyActionIdentifier {
+                let text = reply.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let roomId, !text.isEmpty else { return }
+                await MainActor.run {
+                    Task { try? await matrixService?.sendText(roomId: roomId, text: text) }
+                }
+                return
+            }
+
             await MainActor.run {
                 if let roomId {
                     // For a window that is not up yet, and for one that is.

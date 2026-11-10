@@ -655,6 +655,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     private func markAsReadIfNeeded() {
         guard !readOnly, isNearBottom, NSApp.isActive else { return }
         Task { await matrixService.markAsRead(roomId: roomId, sendPublicReceipt: sendReadReceipts) }
+        DeliveredNotifications.remove(forRoom: roomId)
     }
 
     @ViewBuilder

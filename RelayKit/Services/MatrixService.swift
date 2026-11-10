@@ -86,6 +86,12 @@ public final class MatrixService: MatrixServiceProtocol {
     private var client: ClientProxy?
     private var syncTask: Task<Void, Never>?
     @ObservationIgnored private var timelineViewModels: [String: TimelineViewModel] = [:]
+
+    /// The account's default notification level for direct chats, as the
+    /// server has it. Rooms without a rule of their own follow it.
+    public private(set) var defaultDirectNotificationMode: DefaultNotificationMode = .allMessages
+    /// The same for group rooms.
+    public private(set) var defaultGroupNotificationMode: DefaultNotificationMode = .mentionsAndKeywordsOnly
     /// Room IDs ordered by most-recent access (last element = most recent).
     /// Used to implement LRU eviction for ``timelineViewModels``.
     @ObservationIgnored private var timelineAccessOrder: [String] = []
@@ -452,6 +458,7 @@ public final class MatrixService: MatrixServiceProtocol {
             )
             cachedNotificationKeywords = (try? await getNotificationKeywords()) ?? []
             roomListManager.notificationKeywords = cachedNotificationKeywords
+            await refreshDefaultNotificationModes()
             roomListManager.currentUserId = client.userID
         } catch is CancellationError {
             // Logout cancelled the sync — don't overwrite state
@@ -1080,6 +1087,30 @@ public final class MatrixService: MatrixServiceProtocol {
         try? await room.typingNotice(isTyping: isTyping)
     }
 
+    public func saveDraft(roomId: String, text: String) async {
+        guard let room = room(id: roomId) else { return }
+        if text.isEmpty {
+            try? await room.clearComposerDraft(threadRoot: nil)
+        } else {
+            let draft = ComposerDraft(plainText: text, htmlText: nil, draftType: .newMessage, attachments: [])
+            try? await room.saveComposerDraft(draft: draft, threadRoot: nil)
+        }
+    }
+
+    public func loadDraft(roomId: String) async -> String? {
+        guard let room = room(id: roomId) else { return nil }
+        return try? await room.loadComposerDraft(threadRoot: nil)?.plainText
+    }
+
+    /// Sends a plain text message to a room without a timeline on screen:
+    /// the Reply action of a notification.
+    public func sendText(roomId: String, text: String) async throws {
+        guard let room = room(id: roomId) else { throw RelayError.roomNotFound(roomId) }
+        let content = messageEventContentFromMarkdown(md: text)
+            .withMentions(mentions: Mentions(userIds: [], room: false))
+        _ = try await room.timeline().send(msg: content)
+    }
+
     public func donateOutgoingInteraction(roomId: String) {
         guard let roomSummary = rooms.first(where: { $0.id == roomId }) else { return }
         intentDonation.donateOutgoingMessage(roomSummary: roomSummary)
@@ -1332,6 +1363,19 @@ public final class MatrixService: MatrixServiceProtocol {
         let settings = try await notificationSettings()
         try await settings.setDefaultRoomNotificationMode(isEncrypted: true, isOneToOne: isOneToOne, mode: mode.sdkMode)
         try await settings.setDefaultRoomNotificationMode(isEncrypted: false, isOneToOne: isOneToOne, mode: mode.sdkMode)
+        if isOneToOne {
+            defaultDirectNotificationMode = mode
+        } else {
+            defaultGroupNotificationMode = mode
+        }
+    }
+
+    /// Reads the account's default levels once per session, for the Dock
+    /// badge: a room without a rule of its own counts by these, not by a
+    /// guess of what they might be.
+    private func refreshDefaultNotificationModes() async {
+        defaultDirectNotificationMode = (try? await getDefaultNotificationMode(isOneToOne: true)) ?? .allMessages
+        defaultGroupNotificationMode = (try? await getDefaultNotificationMode(isOneToOne: false)) ?? .mentionsAndKeywordsOnly
     }
 
     public func hasConsistentNotificationSettings() async throws -> Bool {

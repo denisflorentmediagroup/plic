@@ -380,6 +380,19 @@ public protocol MatrixServiceProtocol: AnyObject, Observable {
     ///   - isTyping: `true` to indicate the user is typing, `false` to stop.
     func sendTypingNotice(roomId: String, isTyping: Bool) async
 
+    /// The account's default notification level for direct chats; rooms
+    /// without a rule of their own follow it.
+    var defaultDirectNotificationMode: DefaultNotificationMode { get }
+    /// The same for group rooms.
+    var defaultGroupNotificationMode: DefaultNotificationMode { get }
+
+    /// Keeps an unsent message for a room across launches, in the SDK's
+    /// encrypted store. An empty text clears it.
+    func saveDraft(roomId: String, text: String) async
+
+    /// The unsent message kept for a room, if any.
+    func loadDraft(roomId: String) async -> String?
+
     /// Donates an outgoing interaction intent for a room so the system can
     /// suggest the conversation in the share sheet.
     ///
@@ -877,6 +890,12 @@ public extension MatrixServiceProtocol {
     func makeSessionVerificationViewModel() async throws -> (any SessionVerificationViewModelProtocol)? {
         try await makeSessionVerificationViewModel(acceptingIncomingRequest: false)
     }
+
+    // Defaults for mocks and previews, which have no account behind them.
+    var defaultDirectNotificationMode: DefaultNotificationMode { .allMessages }
+    var defaultGroupNotificationMode: DefaultNotificationMode { .mentionsAndKeywordsOnly }
+    func saveDraft(roomId: String, text: String) async {}
+    func loadDraft(roomId: String) async -> String? { nil }
 }
 
 // MARK: - Environment Key
@@ -944,6 +963,10 @@ private final class PlaceholderMatrixService: MatrixServiceProtocol {
     func markAsRead(roomId: String, sendPublicReceipt: Bool) async {}
     func fullyReadEventId(roomId: String) async -> String? { nil }
     func sendTypingNotice(roomId: String, isTyping: Bool) async {}
+    var defaultDirectNotificationMode: DefaultNotificationMode { .allMessages }
+    var defaultGroupNotificationMode: DefaultNotificationMode { .mentionsAndKeywordsOnly }
+    func saveDraft(roomId: String, text: String) async {}
+    func loadDraft(roomId: String) async -> String? { nil }
     func donateOutgoingInteraction(roomId: String) {}
     func roomDetails(roomId: String) async -> RoomDetails? { nil }
     func roomMembers(roomId: String) async -> [RoomMemberDetails] { [] }
