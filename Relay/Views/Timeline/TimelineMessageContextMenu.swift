@@ -18,6 +18,7 @@ import RelayInterface
 enum TimelineMessageContextMenuEntry: Equatable {
     case reply
     case replyInThread
+    case forward
     case copyMessage
     case saveMedia
     case addReaction
@@ -46,6 +47,11 @@ enum TimelineMessageContextMenu {
         var result: [TimelineMessageContextMenuEntry] = [.copyMessage]
         if message.mediaInfo != nil {
             result.append(.saveMedia)
+        }
+        // Only what the SDK can re-send as a message: text and media, not a
+        // poll or a deleted message; and only once the server has it.
+        if message.isForwardable {
+            result.append(.forward)
         }
         if canSend {
             result.insert(.reply, at: 0)
@@ -83,6 +89,7 @@ enum TimelineMessageContextMenu {
 enum TimelineRowContextAction {
     case reply(TimelineMessage)
     case replyInThread(TimelineMessage)
+    case forward(TimelineMessage)
     case copy(String)
     case saveMedia(TimelineMessage)
     case togglePin(String)

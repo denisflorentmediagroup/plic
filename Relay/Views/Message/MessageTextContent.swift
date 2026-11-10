@@ -215,6 +215,12 @@ final class MessageTextContent: NSTextView {
                     at: insertIndex
                 )
                 insertIndex += 1
+            case .forward:
+                baseMenu.insertItem(
+                    menuItem(title: "Forward…", symbol: "arrowshape.turn.up.right", action: #selector(contextForward)),
+                    at: insertIndex
+                )
+                insertIndex += 1
             case .copyMessage:
                 baseMenu.insertItem(
                     menuItem(title: "Copy Message", symbol: "doc.on.doc", action: #selector(contextCopyMessage)),
@@ -299,6 +305,11 @@ final class MessageTextContent: NSTextView {
     @objc private func contextReplyInThread() {
         guard let message = contextMessage else { return }
         onMessageContextAction?(.replyInThread(message))
+    }
+
+    @objc private func contextForward() {
+        guard let message = contextMessage else { return }
+        onMessageContextAction?(.forward(message))
     }
 
     @objc private func contextCopyMessage() {

@@ -386,6 +386,9 @@ public protocol MatrixServiceProtocol: AnyObject, Observable {
     /// The same for group rooms.
     var defaultGroupNotificationMode: DefaultNotificationMode { get }
 
+    /// Sends a message again, as is, to another room.
+    func forwardMessage(eventId: String, from roomId: String, to targetRoomId: String) async throws
+
     /// Searches the homeserver's user directory. The term goes to the
     /// server; results are whoever it chooses to show.
     func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult]
@@ -921,6 +924,7 @@ public extension MatrixServiceProtocol {
     func resetRecoveryKey() async throws -> String { "" }
     func enableKeyBackup() async throws {}
     func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult] { [] }
+    func forwardMessage(eventId: String, from roomId: String, to targetRoomId: String) async throws {}
     var defaultDirectNotificationMode: DefaultNotificationMode { .allMessages }
     var defaultGroupNotificationMode: DefaultNotificationMode { .mentionsAndKeywordsOnly }
     func saveDraft(roomId: String, text: String) async {}

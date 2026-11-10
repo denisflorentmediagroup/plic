@@ -515,6 +515,15 @@ public struct TimelineMessage: Identifiable, Sendable, Equatable {
     }
 
     /// Whether this message is a non-text type that requires special rendering (media, redacted, encrypted, etc.).
+    /// Whether this message can be sent again, as is, to another room.
+    nonisolated public var isForwardable: Bool {
+        guard eventID.hasPrefix("$") else { return false }
+        switch kind {
+        case .text, .emote, .notice, .image, .video, .audio, .file, .sticker, .location: return true
+        default: return false
+        }
+    }
+
     nonisolated public var isSpecialType: Bool {
         switch kind {
         case .text, .emote, .notice: false

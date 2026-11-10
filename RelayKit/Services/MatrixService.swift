@@ -1110,6 +1110,24 @@ public final class MatrixService: MatrixServiceProtocol {
         try? await room.typingNotice(isTyping: isTyping)
     }
 
+    public func forwardMessage(eventId: String, from roomId: String, to targetRoomId: String) async throws {
+        guard let source = room(id: roomId), let target = room(id: targetRoomId) else {
+            throw RelayError.roomNotFound(targetRoomId)
+        }
+        let item = try await source.timeline().getEventTimelineItemByEventId(eventId: eventId)
+        guard case .msgLike(let msgLike) = item.content, case .message(let message) = msgLike.kind else {
+            throw RelayError.messageSendFailed("This kind of message cannot be forwarded.")
+        }
+        // The content as sent, relations stripped: a forwarded reply is not
+        // a reply in the room it lands in.
+        let content = try contentWithoutRelationFromMessage(message: message)
+        _ = try await target.timeline().send(msg: content)
+        _activityLog.log(
+            category: .timeline, severity: .info, source: "MatrixService",
+            summary: "Forwarded a message", roomId: targetRoomId
+        )
+    }
+
     public func searchUsers(term: String, limit: Int) async throws -> [UserSearchResult] {
         let client = try requireClient()
         let results = try await client.searchUsers(searchTerm: term, limit: UInt64(max(1, limit)))

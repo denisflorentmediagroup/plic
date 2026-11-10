@@ -216,6 +216,12 @@ struct TimelineRowView: View, Equatable {
             } label: {
                 Label("Reply in Thread", systemImage: "bubble.left.and.text.bubble.right")
             }
+        case .forward:
+            Button {
+                actions.contextAction(.forward(message))
+            } label: {
+                Label("Forward\u{2026}", systemImage: "arrowshape.turn.up.right")
+            }
         case .copyMessage:
             Button {
                 actions.contextAction(.copy(message.body))

@@ -71,6 +71,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     @State private var compose = ComposeViewModel()
     @State private var messageToDelete: TimelineMessage?
     @State private var messageToReport: TimelineMessage?
+    @State private var messageToForward: TimelineMessage?
 
     @State private var tableProxy = TimelineTableProxy()
     @State private var isNearBottom = true
@@ -507,6 +508,9 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
         } message: {
             Text("Are you sure you want to delete this message? This cannot be undone.")
         }
+        .sheet(item: $messageToForward) { message in
+            ForwardMessageSheet(message: message, fromRoomId: roomId)
+        }
         .sheet(item: $messageToReport) { message in
             ReportContentSheet(message: message, roomId: roomId)
         }
@@ -937,6 +941,8 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             }
         case .replyInThread(let message):
             onOpenThread?(message.eventID)
+        case .forward(let message):
+            messageToForward = message
         case .copy(let text):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
