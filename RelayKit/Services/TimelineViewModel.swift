@@ -96,6 +96,16 @@ final class TimelineViewModel: TimelineViewModelProtocol {
     @ObservationIgnored private var typingHandle: TaskHandle?
     @ObservationIgnored private var identityHandle: TaskHandle?
 
+    /// Bumped by every suspension and teardown. A setup that was awaiting the
+    /// SDK when that happened finds the number changed on return and stops,
+    /// instead of installing handles and tasks on a timeline that is meant to
+    /// be idle — which left a live subscription, and the SDK timeline it kept
+    /// alive, behind on every quick room switch.
+    @ObservationIgnored private var setupGeneration = 0
+
+    /// Fetches of quoted events still in flight, cancelled with the timeline.
+    @ObservationIgnored private var replyFetchTask: Task<Void, Never>?
+
     /// Members whose encryption identity changed since this account last
     /// trusted it, until the user acknowledges each.
     private(set) var identityChanges: [IdentityChange] = []
@@ -135,10 +145,11 @@ final class TimelineViewModel: TimelineViewModelProtocol {
     }
 
     deinit {
-        let tasks = MainActor.assumeIsolated { (observationTask, paginationTask, typingTask) }
+        let tasks = MainActor.assumeIsolated { (observationTask, paginationTask, typingTask, replyFetchTask) }
         tasks.0?.cancel()
         tasks.1?.cancel()
         tasks.2?.cancel()
+        tasks.3?.cancel()
     }
 
     // MARK: - Public
@@ -156,6 +167,8 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             timelineFocus = .live
             hasReachedEnd = true
             observeTypingNotifications()
+        } catch is CancellationError {
+            isLoading = false
         } catch {
             activityLog?.log(
                 category: .timeline, severity: .error, source: "TimelineViewModel",
@@ -188,6 +201,8 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                 for await _ in diffStream { break }
             }
             await rebuildMessages()
+            isLoading = false
+        } catch is CancellationError {
             isLoading = false
         } catch {
             activityLog?.log(
@@ -269,6 +284,9 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             ))
             timelineFocus = .focusedOnEvent(eventId)
             hasReachedEnd = false
+        } catch is CancellationError {
+            isLoading = false
+            return
         } catch {
             activityLog?.log(
                 category: .timeline, severity: .error, source: "TimelineViewModel",
@@ -307,6 +325,8 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         do {
             try await setupTimeline(focus: .live(hideThreadedEvents: false))
             timelineFocus = .live
+        } catch is CancellationError {
+            isLoading = false
         } catch {
             activityLog?.log(
                 category: .timeline, severity: .error, source: "TimelineViewModel",
@@ -732,11 +752,14 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         paginationTask = nil
         typingTask?.cancel()
         typingTask = nil
+        replyFetchTask?.cancel()
+        replyFetchTask = nil
         timelineHandle = nil
         paginationHandle = nil
         typingHandle = nil
         identityHandle = nil
         sdkTimeline = nil
+        setupGeneration &+= 1
 
         // Clear raw SDK items but keep the mapped messages for instant display.
         timelineItems = []
@@ -779,6 +802,12 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                 resumeState,
                 "success"
             )
+        } catch is CancellationError {
+            PerformanceSignposts.roomSwitch.endInterval(
+                PerformanceSignposts.RoomSwitchName.resume,
+                resumeState,
+                "suspended again"
+            )
         } catch {
             PerformanceSignposts.roomSwitch.endInterval(
                 PerformanceSignposts.RoomSwitchName.resume,
@@ -800,10 +829,13 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         observationTask = nil
         paginationTask?.cancel()
         paginationTask = nil
+        replyFetchTask?.cancel()
+        replyFetchTask = nil
         timelineHandle = nil
         paginationHandle = nil
         identityHandle = nil
         sdkTimeline = nil
+        setupGeneration &+= 1
         timelineItems = []
         messages = []
         hasReachedStart = false
@@ -820,8 +852,12 @@ final class TimelineViewModel: TimelineViewModelProtocol {
     }
 
     /// Creates a new SDK timeline with the given focus, subscribes to diffs and pagination status.
+    ///
+    /// Throws `CancellationError` when the view model was suspended or torn
+    /// down while the SDK was building the timeline; nothing is installed then.
     private func setupTimeline(focus: TimelineFocus) async throws {
         let label = roomLabel
+        let generation = setupGeneration
         let setupState = PerformanceSignposts.roomSwitch.beginInterval(
             PerformanceSignposts.RoomSwitchName.setupTimeline,
             "\(label)"
@@ -854,6 +890,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             PerformanceSignposts.RoomSwitchName.sdkTimelineCreate,
             createState
         )
+        guard generation == setupGeneration else { throw CancellationError() }
 
         sdkTimeline = tl
         observeTimeline(tl)
@@ -867,7 +904,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                     PerformanceSignposts.RoomSwitchName.paginationSubscribe,
                     "\(label)"
                 )
-                try await observePaginationStatus(tl)
+                try await observePaginationStatus(tl, generation: generation)
                 PerformanceSignposts.roomSwitch.endInterval(
                     PerformanceSignposts.RoomSwitchName.paginationSubscribe,
                     paginateSubState
@@ -905,6 +942,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         }
         let label = roomLabel
 
+        observationTask?.cancel()
         observationTask = Task { [weak self] in
             guard let self else { return }
 
@@ -912,8 +950,11 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                 PerformanceSignposts.RoomSwitchName.addListener,
                 "\(label)"
             )
-            self.timelineHandle = await tl.addListener(listener: listener)
+            let handle = await tl.addListener(listener: listener)
+            guard !Task.isCancelled else { return }
+            self.timelineHandle = handle
             await self.observeIdentityChanges()
+            guard !Task.isCancelled else { return }
             PerformanceSignposts.roomSwitch.endInterval(
                 PerformanceSignposts.RoomSwitchName.addListener,
                 addListenerState
@@ -1025,12 +1066,14 @@ final class TimelineViewModel: TimelineViewModelProtocol {
     private static let maxPaginationRetries = 3
 
     // swiftlint:disable:next identifier_name
-    private func observePaginationStatus(_ tl: Timeline) async throws {
+    private func observePaginationStatus(_ tl: Timeline, generation: Int) async throws {
         let (stream, continuation) = AsyncStream<PaginationStatus>.makeStream()
         let listener = SDKListener<PaginationStatus> { status in
             continuation.yield(status)
         }
-        paginationHandle = try await tl.subscribeToBackPaginationStatus(listener: listener)
+        let handle = try await tl.subscribeToBackPaginationStatus(listener: listener)
+        guard generation == setupGeneration else { throw CancellationError() }
+        paginationHandle = handle
 
         paginationTask = Task { [weak self] in
             for await status in stream {
@@ -1169,7 +1212,9 @@ final class TimelineViewModel: TimelineViewModelProtocol {
             Task { @MainActor in await self?.apply(identityChanges: changes) }
         }
         do {
-            identityHandle = try await room.subscribeToIdentityStatusChanges(listener: listener)
+            let handle = try await room.subscribeToIdentityStatusChanges(listener: listener)
+            // Dropped on the spot if the timeline was suspended meanwhile.
+            identityHandle = Task.isCancelled ? nil : handle
         } catch {
             // An unencrypted room has no identities to watch.
             identityHandle = nil
@@ -1224,6 +1269,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         }
         typingHandle = room.subscribeToTypingNotifications(listener: listener)
 
+        typingTask?.cancel()
         typingTask = Task { [weak self] in
             // A child task that resolves display names and avatar URLs.
             // Cancelled and replaced each time a new typing notification
@@ -1633,8 +1679,11 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         // swiftlint:disable:next identifier_name
         guard !newFetchIds.isEmpty, let tl = sdkTimeline else { return }
         fetchedReplyEventIds.formUnion(newFetchIds)
-        Task {
+        let previous = replyFetchTask
+        replyFetchTask = Task {
+            await previous?.value
             for eventId in newFetchIds {
+                guard !Task.isCancelled else { return }
                 try? await tl.fetchDetailsForEvent(eventId: eventId)
             }
         }
