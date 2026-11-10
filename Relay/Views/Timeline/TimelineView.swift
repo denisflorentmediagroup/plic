@@ -234,7 +234,10 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                         roomId: roomId,
                         successorRoomId: successorRoomId,
                         onRoomTap: onRoomTap,
-                        onSendWillScroll: { pendingScrollToBottom = true },
+                        onSendWillScroll: {
+                            pendingScrollToBottom = true
+                            showUnreadMarker = false
+                        },
                         onHeightChanged: { height in
                             let previous = composeBarHeight
                             let changed = height != previous
@@ -408,29 +411,22 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
             if !readOnly, sendTypingNotifications {
                 Task { await matrixService.sendTypingNotice(roomId: roomId, isTyping: false) }
             }
+            if !readOnly {
+                compose.persistDraft(roomId: roomId, matrixService: matrixService)
+            }
             memberRefreshTask?.cancel()
             unreadMarkerDismissTask?.cancel()
+            viewModel.firstUnreadMessageId = nil
         }
         .onChange(of: matrixService.rooms.first(where: { $0.id == roomId })?.successorRoomId) { _, newValue in
             successorRoomId = newValue
         }
         .onChange(of: viewModel.firstUnreadMessageId) { oldValue, newValue in
-            // When the unread marker position is first computed (nil -> value),
-            // start a 5-second auto-dismiss timer. This avoids the race where
-            // the old .task check fired before the diff pipeline had set the ID.
+            // The marker stays where it is until the user leaves the room or
+            // sends something, like Messages and Mail: a line that vanished
+            // after five seconds was gone before a long catch-up reached it.
             guard oldValue == nil, newValue != nil else { return }
             showUnreadMarker = true
-            unreadMarkerDismissTask?.cancel()
-            unreadMarkerDismissTask = Task {
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.4)) {
-                    showUnreadMarker = false
-                }
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-                viewModel.firstUnreadMessageId = nil
-            }
         }
         .onChange(of: membershipEventCount) {
             guard !readOnly else { return }
