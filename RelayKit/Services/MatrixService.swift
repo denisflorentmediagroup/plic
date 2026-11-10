@@ -16,6 +16,7 @@
 import AppKit
 import Foundation
 import RelayInterface
+import Synchronization
 
 /// The concrete implementation of ``MatrixServiceProtocol`` backed by the Matrix Rust SDK.
 ///
@@ -352,8 +353,7 @@ public final class MatrixService: MatrixServiceProtocol {
         roomListManager.reset()
         spaceListManager.reset()
         media.reset()
-        timelineViewModels = [:]
-        timelineAccessOrder = []
+        discardTimelines(ids: Array(timelineViewModels.keys))
         cachedNotificationKeywords = []
         pendingDeepLink = nil
     }
@@ -758,6 +758,19 @@ public final class MatrixService: MatrixServiceProtocol {
         timelineAccessOrder.append(roomId)
     }
 
+    /// Drops timeline view models for good: suspended first, so their
+    /// observation tasks and SDK handles end with them. Removing one from
+    /// the cache while it still observed left its task, its listener and the
+    /// SDK timeline alive — after sign-out, after leaving a room.
+    private func discardTimelines(ids: [String]) {
+        for id in ids {
+            if let vm = timelineViewModels.removeValue(forKey: id), !vm.isSuspended {
+                vm.suspend()
+            }
+            timelineAccessOrder.removeAll { $0 == id }
+        }
+    }
+
     /// Evicts the least-recently-used timeline view models when the cache
     /// exceeds ``timelineCacheCapacity``. Suspended VMs are evicted first;
     /// if all are active, the oldest is suspended then evicted.
@@ -877,8 +890,7 @@ public final class MatrixService: MatrixServiceProtocol {
     public func leaveRoom(id: String) async throws {
         guard let room = room(id: id) else { return }
         try await room.leave()
-        timelineViewModels.removeValue(forKey: id)
-        timelineAccessOrder.removeAll { $0 == id }
+        discardTimelines(ids: [id])
         roomListManager.removeRooms(ids: [id])
     }
 
@@ -907,10 +919,7 @@ public final class MatrixService: MatrixServiceProtocol {
             allIds.append(spaceId)
         }
         try await handle.leave(roomIds: allIds)
-        for id in allIds {
-            timelineViewModels.removeValue(forKey: id)
-            timelineAccessOrder.removeAll { $0 == id }
-        }
+        discardTimelines(ids: allIds)
         let idSet = Set(allIds)
         roomListManager.removeRooms(ids: idSet)
         spaceListManager.removeSpaces(ids: idSet)
@@ -1022,12 +1031,15 @@ public final class MatrixService: MatrixServiceProtocol {
         // Use a nonisolated(unsafe) var so the handle stays alive until the callback fires.
         nonisolated(unsafe) var handle: TaskHandle?
         let result: String? = await withCheckedContinuation { continuation in
+            // The listener fires on every change, from the SDK's threads, and
+            // not at all for a room never marked read: a continuation may be
+            // resumed only once, and must be resumed at all.
+            let once = OneShotContinuation(continuation)
             let listener = RoomAccountDataListenerAdapter { event, _ in
-                switch event {
-                case .fullyReadEvent(let eventId):
-                    continuation.resume(returning: eventId)
-                default:
-                    continuation.resume(returning: nil)
+                if case .fullyReadEvent(let eventId) = event {
+                    once.resume(eventId)
+                } else {
+                    once.resume(nil)
                 }
             }
             do {
@@ -1037,7 +1049,11 @@ public final class MatrixService: MatrixServiceProtocol {
                     listener: listener
                 )
             } catch {
-                continuation.resume(returning: nil)
+                once.resume(nil)
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                once.resume(nil)
             }
         }
         handle?.cancel()
@@ -1793,5 +1809,22 @@ public final class MatrixService: MatrixServiceProtocol {
                 isCurrentDevice: device.deviceId == currentDeviceId
             )
         }
+    }
+}
+
+/// Resumes a continuation at most once, from whichever thread gets there first.
+nonisolated private final class OneShotContinuation<T: Sendable>: Sendable {
+    private let pending: Mutex<CheckedContinuation<T, Never>?>
+
+    init(_ continuation: CheckedContinuation<T, Never>) {
+        pending = Mutex(continuation)
+    }
+
+    func resume(_ value: T) {
+        let continuation = pending.withLock { slot -> CheckedContinuation<T, Never>? in
+            defer { slot = nil }
+            return slot
+        }
+        continuation?.resume(returning: value)
     }
 }

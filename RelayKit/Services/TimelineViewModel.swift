@@ -197,9 +197,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
 
             // Wait for the diff observer to process the paginated items,
             // then rebuild messages and clear the loading flag.
-            if let diffStream = initialDiffsStream {
-                for await _ in diffStream { break }
-            }
+            await waitForInitialDiffs()
             await rebuildMessages()
             isLoading = false
         } catch is CancellationError {
@@ -311,9 +309,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         // `timelineItems` is populated before we clear the loading flag.
         // Focused timelines don't use the pagination-status observer,
         // so this is the only gate that prevents an empty flash.
-        if let diffStream = initialDiffsStream {
-            for await _ in diffStream { break }
-        }
+        await waitForInitialDiffs()
         await rebuildMessages()
         isLoading = false
     }
@@ -928,6 +924,21 @@ final class TimelineViewModel: TimelineViewModelProtocol {
 
     // MARK: - Private
 
+    /// Waits for the first batch of diffs, or gives up after `timeout`.
+    ///
+    /// A timeline that never delivers one — an event focus the server has
+    /// nothing for, a thread with no visible items — otherwise kept the
+    /// spinner up for good.
+    private func waitForInitialDiffs(timeout: Duration = .seconds(10)) async {
+        guard let stream = initialDiffsStream else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { for await _ in stream { break } }
+            group.addTask { try? await Task.sleep(for: timeout) }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+
     /// How long to wait for additional diffs before rebuilding again after
     /// a burst. Only applies when more diffs arrive while a rebuild is
     /// already in progress — the first diff always triggers an immediate
@@ -1122,9 +1133,7 @@ final class TimelineViewModel: TimelineViewModelProtocol {
                         // the diff observer to deliver at least one batch so
                         // `timelineItems` is populated, then rebuild messages
                         // before clearing the loading flag.
-                        if let diffStream = self.initialDiffsStream {
-                            for await _ in diffStream { break }
-                        }
+                        await self.waitForInitialDiffs()
                         await self.rebuildMessages()
                         self.isLoading = false
                     }
