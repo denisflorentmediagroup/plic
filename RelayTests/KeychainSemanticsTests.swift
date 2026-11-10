@@ -28,6 +28,7 @@ import Testing
 /// keychain, and writing to `matrix-session-debug` would destroy their live
 /// login — which is also why `KeychainService` grew account-parameterised
 /// variants in the first place.
+@Suite(.enabled(if: KeychainProbe.isUsable, "the Keychain is not usable from this test host"))
 struct KeychainSemanticsTests {
 
     @Test("Add path: a first save lands and reads back")

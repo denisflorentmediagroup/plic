@@ -32,6 +32,7 @@ import Testing
 /// same access group, same keychain. A plain command-line tool cannot reproduce
 /// any of it: it gets `errSecMissingEntitlement` before reaching the
 /// interesting part.
+@Suite(.enabled(if: KeychainProbe.isUsable, "the Keychain is not usable from this test host"))
 struct LegacyPurgeScopeTests {
 
     private static let service = "im.plic"

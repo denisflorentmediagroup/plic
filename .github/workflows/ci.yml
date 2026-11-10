@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build
+    name: Build and test
     # Plic is built with Xcode 27. If the runner label below is unavailable,
     # check GitHub's runner images documentation for the current one:
     # https://github.com/actions/runner-images
@@ -45,4 +45,21 @@ jobs:
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
-            clean build
+            clean build-for-testing
+
+      - name: Test
+        run: |
+          xcodebuild -project Relay.xcodeproj \
+            -scheme Relay \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            -resultBundlePath TestResults.xcresult \
+            test-without-building
+
+      - name: Keep the test results when they fail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults.xcresult

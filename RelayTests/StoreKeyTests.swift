@@ -28,6 +28,7 @@ import Testing
 /// The tests run against the real Keychain under the `-debug` account that
 /// ``KeychainService`` selects in DEBUG builds, so they never touch the key a
 /// release build would use.
+@Suite(.enabled(if: KeychainProbe.isUsable, "the Keychain is not usable from this test host"))
 struct StoreKeyTests {
 
     @Test("The store key is 256 bits, as SQLCipher expects")
