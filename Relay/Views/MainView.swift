@@ -167,9 +167,18 @@ struct MainView: View { // swiftlint:disable:this type_body_length
                 if searchModel.previousSelectedRoomId == nil {
                     searchModel.previousSelectedRoomId = selectedRoomId
                 }
-            } else if let previousId = searchModel.previousSelectedRoomId {
-                selectedRoomId = previousId
-                searchModel.previousSelectedRoomId = nil
+            } else {
+                // Closing the search drops its results, not just hides them:
+                // they are decrypted messages, and the field's text may stay.
+                messageSearchTask?.cancel()
+                messageSearchService?.cancel()
+                searchModel.messageResults = []
+                searchModel.hasMoreMessages = false
+                searchModel.isSearchingMessages = false
+                if let previousId = searchModel.previousSelectedRoomId {
+                    selectedRoomId = previousId
+                    searchModel.previousSelectedRoomId = nil
+                }
             }
         }
         .onChange(of: appActions.focusSearch) { _, shouldFocus in
