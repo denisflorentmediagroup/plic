@@ -73,8 +73,10 @@ final class ActivityLog: ActivityLogProtocol {
             roomId: roomId,
             metadata: metadata
         )
+        // Dropping one entry at a time moved the other ten thousand on
+        // every log line; a batch keeps the cost rare.
         if events.count >= capacity {
-            events.removeFirst()
+            events.removeFirst(max(1, capacity / 10))
         }
         events.append(event)
 
