@@ -137,6 +137,9 @@ struct RoomListView: View {
                 }
             }
         }
+        .onChange(of: appActions.roomStep) { oldValue, newValue in
+            stepSelection(by: newValue - oldValue)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 OfflineBanner()
@@ -317,6 +320,17 @@ extension RoomListView {
         subsystem: "im.plic.performance",
         category: "RoomList"
     )
+
+    /// Moves the selection by `step` rows through the sidebar's current
+    /// order, pinned rooms first, wrapping at either end.
+    private func stepSelection(by step: Int) {
+        let filtered = filteredRooms
+        let ordered = filtered.filter(\.isFavourite) + filtered.filter { !$0.isFavourite }
+        guard !ordered.isEmpty else { return }
+        let current = ordered.firstIndex { $0.id == selectedRoomId } ?? (step > 0 ? -1 : 0)
+        let next = ((current + step) % ordered.count + ordered.count) % ordered.count
+        selectedRoomId = ordered[next].id
+    }
 
     /// All joined rooms with the current space, type, search filter, and sort applied.
     private var filteredRooms: [RoomSummary] {

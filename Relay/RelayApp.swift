@@ -70,6 +70,7 @@ struct RelayApp: App {
             EditLastMessageCommand()
             SearchCommand(appActions: appActions)
             QuickSwitchCommand(appActions: appActions)
+            ConversationCommands(appActions: appActions)
             SidebarCommands()
             InspectorCommands()
             TextSizeCommands()
@@ -420,6 +421,9 @@ final class AppActions {
     /// takes it and clears it.
     var pendingRoomId: String?
     var showQuickSwitch = false
+    /// Requests to move the selection in the sidebar: incremented for the
+    /// next conversation, decremented for the previous one.
+    var roomStep = 0
 }
 
 // MARK: - File Menu Commands
@@ -472,7 +476,8 @@ struct EditLastMessageCommand: Commands {
             Button("Edit Last Message") {
                 editLastMessage?()
             }
-            .keyboardShortcut("e", modifiers: .command)
+            // Not ⌘E, which macOS gives to "Use Selection for Find".
+            .keyboardShortcut("e", modifiers: [.command, .option])
             .disabled(editLastMessage == nil)
         }
     }
@@ -494,7 +499,30 @@ struct SearchCommand: Commands {
             Button("Search\u{2026}") {
                 appActions.focusSearch = true
             }
-            .keyboardShortcut("g", modifiers: .command)
+            // ⌘F, as in Messages and Mail; ⌘G is "Find Next" everywhere else.
+            .keyboardShortcut("f", modifiers: .command)
+        }
+    }
+}
+
+// MARK: - Conversation Commands
+
+/// A Conversation menu, as Messages has one: the next and previous
+/// conversation in the sidebar's current order, on Messages' own keys.
+struct ConversationCommands: Commands {
+    let appActions: AppActions
+
+    var body: some Commands {
+        CommandMenu("Conversation") {
+            Button("Next Conversation") {
+                appActions.roomStep += 1
+            }
+            .keyboardShortcut(.tab, modifiers: .control)
+
+            Button("Previous Conversation") {
+                appActions.roomStep -= 1
+            }
+            .keyboardShortcut(.tab, modifiers: [.control, .shift])
         }
     }
 }
