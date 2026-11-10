@@ -64,6 +64,8 @@ struct SettingsSessionsTab: View {
     @Environment(\.errorReporter) private var errorReporter
     @State private var viewModel = SessionsSettingsViewModel()
     @State private var verificationItem: VerificationItem?
+    @State private var pendingSignOut: PendingSignOut?
+    @State private var passwordRequest: PendingSignOut?
 
     var body: some View {
         Form {
@@ -113,10 +115,22 @@ struct SettingsSessionsTab: View {
                 }
 
                 if !others.isEmpty {
-                    Section("Other Sessions") {
+                    Section {
                         ForEach(others) { device in
                             DeviceRow(device: device)
+                                .contextMenu {
+                                    Button("Sign Out…", role: .destructive) {
+                                        pendingSignOut = PendingSignOut(deviceIds: [device.id], name: device.displayName ?? device.id)
+                                    }
+                                }
                         }
+                        Button("Sign Out All Other Sessions…", role: .destructive) {
+                            pendingSignOut = PendingSignOut(deviceIds: others.map(\.id), name: nil)
+                        }
+                    } header: {
+                        Text("Other Sessions")
+                    } footer: {
+                        Text("Right-click a session to sign it out. A session you do not recognise should go: it can read what you can.")
                     }
                 }
             }
@@ -129,6 +143,92 @@ struct SettingsSessionsTab: View {
         .sheet(item: $verificationItem) { item in
             VerificationSheet(viewModel: item.viewModel)
         }
+        .confirmationDialog(
+            pendingSignOut?.name.map { "Sign out “\($0)”?" } ?? "Sign out all other sessions?",
+            isPresented: Binding(get: { pendingSignOut != nil }, set: { if !$0 { pendingSignOut = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingSignOut
+        ) { request in
+            Button("Sign Out", role: .destructive) { signOut(request, password: nil) }
+            Button("Cancel", role: .cancel) {}
+        } message: { request in
+            Text(request.name == nil
+                 ? "Every session but this one will have to sign in again. Their encrypted history stays readable here, and in key backup."
+                 : "That session will have to sign in again.")
+        }
+        .sheet(item: $passwordRequest) { request in
+            PasswordForSignOutSheet { password in
+                signOut(request, password: password)
+            }
+        }
+    }
+
+    /// Signs devices out, handling the three answers a server can give.
+    private func signOut(_ request: PendingSignOut, password: String?) {
+        Task {
+            do {
+                switch try await matrixService.signOutDevices(ids: request.deviceIds, password: password) {
+                case .signedOut:
+                    await viewModel.load(service: matrixService)
+                case .passwordRequired:
+                    passwordRequest = request
+                case .managedElsewhere(let url):
+                    if let url = URL(string: url) { NSWorkspace.shared.open(url) }
+                }
+            } catch {
+                errorReporter.report(.sessionsFailed(error.localizedDescription))
+            }
+        }
+    }
+}
+
+/// Devices the user asked to sign out, awaiting confirmation or a password.
+private struct PendingSignOut: Identifiable {
+    let deviceIds: [String]
+    /// The device's name for a single one; `nil` for all the others.
+    let name: String?
+    var id: String { deviceIds.joined(separator: ",") }
+}
+
+/// Asks for the account password a homeserver may require before signing
+/// out devices. The password goes to that server once and is kept nowhere.
+private struct PasswordForSignOutSheet: View {
+    let submit: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @FocusState private var isFieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Confirm Your Password", systemImage: "lock")
+                .font(.title3.bold())
+            Text("Your homeserver asks for the account password before signing out a session. Plic sends it to the server once and does not keep it.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("Password", text: $password)
+                .textFieldStyle(.roundedBorder)
+                .focused($isFieldFocused)
+                .onSubmit(send)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Sign Out", role: .destructive, action: send)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(password.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .onAppear { isFieldFocused = true }
+    }
+
+    private func send() {
+        guard !password.isEmpty else { return }
+        let entered = password
+        password = ""
+        dismiss()
+        submit(entered)
     }
 }
 

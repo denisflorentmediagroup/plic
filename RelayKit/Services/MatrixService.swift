@@ -1721,6 +1721,7 @@ public final class MatrixService: MatrixServiceProtocol {
         switch action {
         case .profile: .profile
         case .devices: .devicesList
+        case .deviceDelete(let deviceId): .deviceDelete(deviceId: deviceId)
         case .deactivate: .accountDeactivate
         }
     }
@@ -1894,6 +1895,64 @@ public final class MatrixService: MatrixServiceProtocol {
     // MARK: - Devices
 
     // swiftlint:disable nesting
+    public func signOutDevices(ids: [String], password: String?) async throws -> DeviceSignOutResult {
+        let client = try requireClient()
+        guard !ids.isEmpty else { return .signedOut }
+
+        // An OIDC server manages devices on its own account page; the
+        // client API below is refused there.
+        let action: AccountManagementAction = ids.count == 1 ? .deviceDelete(deviceId: ids[0]) : .devicesList
+        if let url = try? await client.accountURL(action: action) {
+            return .managedElsewhere(url: url)
+        }
+
+        let session = try client.session()
+        var body: [String: Any] = ["devices": ids]
+        if let password {
+            // User-interactive auth: the first call answered 401 with a
+            // session; the password completes it. Both go in the body.
+            body["auth"] = [
+                "type": "m.login.password",
+                "identifier": ["type": "m.id.user", "user": session.userId],
+                "password": password,
+                "session": pendingDeviceDeletionSession as Any,
+            ]
+        }
+        var request = URLRequest(url: URL(string: "\(client.homeserver)_matrix/client/v3/delete_devices")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        switch status {
+        case 200:
+            pendingDeviceDeletionSession = nil
+            _activityLog.log(
+                category: .auth, severity: .info, source: "MatrixService",
+                summary: "Signed out \(ids.count) other device(s)"
+            )
+            return .signedOut
+        case 401:
+            // The server's auth session, to quote back with the password.
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            pendingDeviceDeletionSession = json?["session"] as? String
+            if password != nil {
+                throw RelayError.sessionsFailed("The password was not accepted.")
+            }
+            return .passwordRequired
+        default:
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let message = json?["error"] as? String ?? "The server answered \(status)."
+            throw RelayError.sessionsFailed(message)
+        }
+    }
+
+    /// The user-interactive auth session of a device sign-out awaiting a
+    /// password. Not a secret: an opaque server-side handle.
+    @ObservationIgnored private var pendingDeviceDeletionSession: String?
+
     private struct DevicesResponse: Decodable {
         struct Device: Decodable {
             let deviceId: String

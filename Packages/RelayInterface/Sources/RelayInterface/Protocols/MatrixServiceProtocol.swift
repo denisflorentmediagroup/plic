@@ -518,6 +518,11 @@ public protocol MatrixServiceProtocol: AnyObject, Observable {
     /// Fetches the list of all devices (sessions) associated with the current user's account.
     func getDevices() async throws -> [DeviceInfo]
 
+    /// Signs other devices out of the account. Servers using OIDC answer
+    /// with their account page instead; others may ask for the password,
+    /// which is sent to the homeserver once and kept nowhere.
+    func signOutDevices(ids: [String], password: String?) async throws -> DeviceSignOutResult
+
     /// Returns whether the current session has been verified via cross-signing.
     func isCurrentSessionVerified() async -> Bool
 
@@ -910,6 +915,7 @@ public extension MatrixServiceProtocol {
     }
 
     // Defaults for mocks and previews, which have no account behind them.
+    func signOutDevices(ids: [String], password: String?) async throws -> DeviceSignOutResult { .signedOut }
     func enableRecovery() async throws -> String { "" }
     func recover(recoveryKey: String) async throws {}
     func resetRecoveryKey() async throws -> String { "" }

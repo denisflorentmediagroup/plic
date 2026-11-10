@@ -25,6 +25,9 @@ public enum AccountAction: Sendable, Equatable {
     /// The signed-in devices list.
     case devices
 
+    /// The page that signs out one device.
+    case deviceDelete(deviceId: String)
+
     /// The deactivation page.
     ///
     /// App Store guideline 5.1.1(v) requires an app offering account creation
