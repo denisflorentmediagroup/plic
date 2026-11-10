@@ -123,7 +123,20 @@ final class AuthenticationService {
     static var searchIndexDirectory: URL {
         let url = applicationSupport.appending(path: searchIndexSubdirectory)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        excludeFromBackup(url)
         return url
+    }
+
+    /// Keeps a directory out of Time Machine and other backups.
+    ///
+    /// The store and the index hold every decrypted message, under a key
+    /// that lives only in this Mac's Keychain. Encrypted or not, a copy on a
+    /// backup disk is a copy nobody asked for, and one that outlives sign-out.
+    static func excludeFromBackup(_ directory: URL) {
+        var url = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     #if DEBUG
@@ -184,6 +197,7 @@ final class AuthenticationService {
             try? FileManager.default.removeItem(at: directory)
         }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        excludeFromBackup(directory)
         try? current.write(to: stamp, atomically: true, encoding: .utf8)
         return discarded
     }
@@ -220,6 +234,7 @@ final class AuthenticationService {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent(subdirectory, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        excludeFromBackup(url)
         return url
     }
 
