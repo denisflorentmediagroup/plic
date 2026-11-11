@@ -30,6 +30,10 @@ struct ComposeBar: View {
     /// Called when the user stages files (from file picker, drag, or paste).
     var onAttach: ([URL]) -> Void
 
+    /// Starts a poll: question, answers, how many one may pick, whether
+    /// results show while it runs.
+    var onCreatePoll: (String, [String], Int, Bool) async -> Void = { _, _, _, _ in }
+
     /// Called when the user finishes recording a voice message.
     var onSendVoice: (VoiceRecorder.Recording) async -> Void
 
@@ -66,6 +70,11 @@ struct ComposeBar: View {
         .animation(.easeOut(duration: 0.15), value: compose.mentionQuery != nil)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: compose.replyingTo != nil)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: compose.editingMessage != nil)
+        .sheet(isPresented: $compose.isShowingPollComposer) {
+            PollComposerSheet { question, answers, maxSelections, isDisclosed in
+                await onCreatePoll(question, answers, maxSelections, isDisclosed)
+            }
+        }
         .fileImporter(
             isPresented: $compose.isShowingFilePicker,
             allowedContentTypes: ComposeViewModel.supportedTypes,
@@ -367,17 +376,28 @@ private struct ComposeBarActions: View {
     @Environment(\.recentEmojiStore) private var recentEmojiStore
 
     var body: some View {
-        Button {
-            compose.isShowingFilePicker = true
+        // A click attaches a file, as before; the menu holds what else can
+        // go into a message.
+        Menu {
+            Button("Attach File…", systemImage: "paperclip") {
+                compose.isShowingFilePicker = true
+            }
+            Button("Create Poll…", systemImage: "chart.bar") {
+                compose.isShowingPollComposer = true
+            }
         } label: {
             Image(systemName: "paperclip")
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 36, height: 36)
                 .contentShape(Circle())
+        } primaryAction: {
+            compose.isShowingFilePicker = true
         }
+        .menuStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityLabel("Attach File")
-        .help("Attach File")
+        .menuIndicator(.hidden)
+        .accessibilityLabel("Attach")
+        .help("Attach a file; hold for a poll")
         .glassEffect(in: .circle)
 
         Button(action: onStartRecording) {

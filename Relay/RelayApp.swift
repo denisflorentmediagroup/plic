@@ -464,6 +464,8 @@ final class AppActions {
     /// Requests to move the selection in the sidebar: incremented for the
     /// next conversation, decremented for the previous one.
     var roomStep = 0
+    /// Asks the open room's compose bar to present the poll composer.
+    var showCreatePoll = false
 }
 
 // MARK: - File Menu Commands
@@ -570,6 +572,12 @@ struct ConversationCommands: Commands {
                 appActions.roomStep -= 1
             }
             .keyboardShortcut(.tab, modifiers: [.control, .shift])
+
+            Divider()
+
+            Button("New Poll…") {
+                appActions.showCreatePoll = true
+            }
         }
     }
 }

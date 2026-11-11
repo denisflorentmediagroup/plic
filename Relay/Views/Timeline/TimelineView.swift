@@ -73,6 +73,7 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
     @State private var messageToReport: TimelineMessage?
     @State private var messageToForward: TimelineMessage?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(AppActions.self) private var appActions
 
     @State private var tableProxy = TimelineTableProxy()
     @State private var isNearBottom = true
@@ -216,7 +217,12 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             }
-            .onChange(of: viewModel.identityChanges.isEmpty) {
+            .onChange(of: appActions.showCreatePoll) {
+            guard appActions.showCreatePoll, !readOnly, threadRootEventId == nil else { return }
+            appActions.showCreatePoll = false
+            compose.isShowingPollComposer = true
+        }
+        .onChange(of: viewModel.identityChanges.isEmpty) {
                 if viewModel.identityChanges.isEmpty {
                     updateIdentityBannerHeight(0)
                 }

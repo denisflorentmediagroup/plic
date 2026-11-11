@@ -200,6 +200,9 @@ public protocol TimelineViewModelProtocol: AnyObject, Observable {
 
     /// Ends a poll the user started.
     func endPoll(pollStartEventId: String) async
+
+    /// Starts a poll in the room.
+    func createPoll(question: String, answers: [String], maxSelections: Int, isDisclosed: Bool) async
 }
 
 public extension TimelineViewModelProtocol {
@@ -207,4 +210,5 @@ public extension TimelineViewModelProtocol {
     func acknowledgeIdentityChange(userId: String) async {}
     func respondToPoll(pollStartEventId: String, answerIds: [String]) async {}
     func endPoll(pollStartEventId: String) async {}
+    func createPoll(question: String, answers: [String], maxSelections: Int, isDisclosed: Bool) async {}
 }

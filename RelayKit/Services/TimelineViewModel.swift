@@ -1218,6 +1218,20 @@ final class TimelineViewModel: TimelineViewModelProtocol {
         }
     }
 
+    func createPoll(question: String, answers: [String], maxSelections: Int, isDisclosed: Bool) async {
+        guard let sdkTimeline else { return }
+        do {
+            try await sdkTimeline.createPoll(
+                question: question,
+                answers: answers,
+                maxSelections: UInt8(clamping: max(1, maxSelections)),
+                pollKind: isDisclosed ? .disclosed : .undisclosed
+            )
+        } catch {
+            errorReporter.report(.messageSendFailed(error.localizedDescription))
+        }
+    }
+
     func endPoll(pollStartEventId: String) async {
         guard let sdkTimeline else { return }
         do {

@@ -68,6 +68,12 @@ struct TimelineBottomBar: View {
                 onAttach: { urls in
                     compose.stageAttachments(urls, errorReporter: errorReporter)
                 },
+                onCreatePoll: { question, answers, maxSelections, isDisclosed in
+                    await viewModel.createPoll(
+                        question: question, answers: answers,
+                        maxSelections: maxSelections, isDisclosed: isDisclosed
+                    )
+                },
                 onSendVoice: { recording in
                     await viewModel.sendVoiceMessage(
                         url: recording.url,

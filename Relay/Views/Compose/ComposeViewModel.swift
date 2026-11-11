@@ -60,6 +60,9 @@ final class ComposeViewModel {
     /// Whether the file picker sheet is presented.
     var isShowingFilePicker = false
 
+    /// Whether the poll composer sheet is up.
+    var isShowingPollComposer = false
+
     /// Whether the emoji picker popover is presented.
     var isShowingEmojiPicker = false
 
