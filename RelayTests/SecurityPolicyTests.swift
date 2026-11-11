@@ -25,6 +25,9 @@ import Testing
 /// between an accidental refactor and a silent loss of the posture:
 /// `ClientBuilderProxy` records what it was configured with, in non-sensitive
 /// form, precisely so this suite can read it back.
+// The builder reads the store key from the Keychain; where a test host
+// cannot use one, there is no builder to inspect.
+@Suite(.enabled(if: KeychainProbe.isUsable, "the Keychain is not usable from this test host"))
 @MainActor
 struct SecurityPolicyTests {
 

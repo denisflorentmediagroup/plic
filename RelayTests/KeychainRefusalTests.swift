@@ -36,7 +36,8 @@ struct KeychainRefusalTests {
         }
     }
 
-    @Test("A Keychain item that was never written reads as absent, not as a failure")
+    @Test("A Keychain item that was never written reads as absent, not as a failure",
+          .enabled(if: KeychainProbe.isUsable, "the Keychain is not usable from this test host"))
     func missingItemIsNotFound() {
         // The distinction the recovery screens depend on: "absent" may lead to
         // clearing data, so it must only ever mean absent.
