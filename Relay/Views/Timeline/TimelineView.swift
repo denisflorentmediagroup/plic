@@ -290,7 +290,10 @@ struct TimelineView: View { // swiftlint:disable:this type_body_length
                 }
             }
             .overlay(alignment: .bottom) {
-                TypingIndicatorRowView(users: displayedTypingUsers)
+                // Stays in the hierarchy so it can fade out, but must not
+                // animate while hidden: it would redraw every frame for as
+                // long as the room is open.
+                TypingIndicatorRowView(users: displayedTypingUsers, isAnimating: isTypingRevealed)
                     .offset(x: isTypingRevealed ? 0 : -60)
                     .opacity(isTypingRevealed ? 1 : 0)
                     .animation(.easeInOut(duration: 0.25), value: isTypingRevealed)

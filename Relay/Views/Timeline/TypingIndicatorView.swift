@@ -22,8 +22,14 @@ import SwiftUI
 /// containing animated dots. Designed to be placed at the end of the
 /// timeline content so that when a real message arrives, it replaces the
 /// indicator in-place with no scroll shift.
+///
+/// The animations redraw on every display frame, so they run only while
+/// `isAnimating` is `true`. A caller that keeps the row in the hierarchy while
+/// hiding it must pass `false`: an invisible row still re-evaluates the window
+/// sixty times a second otherwise.
 struct TypingIndicatorRowView: View {
     let users: [TypingUser]
+    var isAnimating = true
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
@@ -65,11 +71,11 @@ struct TypingIndicatorRowView: View {
     }
 
     private var typingBubble: some View {
-        TypingBubble(colors: userColors)
+        TypingBubble(colors: userColors, isAnimating: isAnimating)
             .padding(.horizontal, BubbleStyle.horizontalPadding)
             .padding(.vertical, 12)
             .background {
-                BreathingColorBackground(colors: userColors)
+                BreathingColorBackground(colors: userColors, isAnimating: isAnimating)
                     .clipShape(BubbleStyle.shape)
             }
     }
@@ -80,12 +86,13 @@ struct TypingIndicatorRowView: View {
 struct BreathingColorBackground: View {
     private let startDate = Date()
     let colors: [Color]
+    var isAnimating = true
 
     var body: some View {
         if colors.isEmpty {
             Color.clear
         } else {
-            SwiftUI.TimelineView(.animation) { context in
+            SwiftUI.TimelineView(.animation(minimumInterval: nil, paused: !isAnimating)) { context in
                 let elapsed = context.date.timeIntervalSince(startDate)
                 let breatheDuration = 3.0
                 let cycleDuration = breatheDuration * Double(colors.count)
@@ -108,9 +115,10 @@ struct BreathingColorBackground: View {
 struct TypingBubble: View {
     private let startDate = Date()
     let colors: [Color]
+    var isAnimating = true
 
     var body: some View {
-        SwiftUI.TimelineView(.animation) { context in
+        SwiftUI.TimelineView(.animation(minimumInterval: nil, paused: !isAnimating)) { context in
             let elapsed = context.date.timeIntervalSince(startDate)
             let breatheDuration = 3.0
             let cycleDuration = breatheDuration * Double(max(colors.count, 1))

@@ -110,6 +110,7 @@ final class AudioPlaybackController {
 
         if isPlaying {
             node.pause()
+            engine.pause()
             isPlaying = false
             ticker?.cancel()
             return
@@ -181,6 +182,10 @@ final class AudioPlaybackController {
             Task { @MainActor [weak self] in
                 guard let self, self.generation == token else { return }
                 self.ticker?.cancel()
+                // A running engine keeps the output device open: it renders
+                // silence on an audio thread and holds an assertion that stops
+                // the Mac from sleeping when idle. Pausing releases both.
+                self.engine.pause()
                 self.isPlaying = false
                 // Leave the playhead at the end so the waveform reads as complete
                 // rather than snapping back the instant the sound stops.
